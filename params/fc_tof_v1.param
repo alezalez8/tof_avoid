@@ -1,0 +1,69 @@
+# tof_avoid: ArduCopter parameters for the module tests on the real FC (FC-01, TZ section 8).
+# Firmware: ArduCopter V4.7.2 (tag Copter-4.7.2, commit fb773567896014da007bca58358704d4a0d8516f).
+# Board: Cube Orange+. Applied by the human only (CLAUDE.md section 7); the agent never writes FC parameters.
+# Values marked * are start values tuned by the tests named in the comment. Same set as params/sitl_tof.param
+# except the SITL-only lines (SERIAL1 pose link, SITL rangefinder, logging).
+#
+# Module port: SERIAL2 (TELEM2) is assumed here; if another free port is used (HW-09), rename SERIAL2_* and SR2_*.
+
+# --- module port: MAVLink 2 at UART_BAUD of the module (115200) ---
+SERIAL2_PROTOCOL 2
+SERIAL2_BAUD 115
+# no "don't forward MAVLink" bit, otherwise the module STATUSTEXT does not reach the GCS
+SERIAL2_OPTIONS 0
+# the module requests ATTITUDE, DISTANCE_SENSOR, EXTENDED_SYS_STATE with SET_MESSAGE_INTERVAL; no other streams.
+# 4.7.2: stream rates are MAVn_*, n = order of the MAVLink serial ports (SERIAL0 USB = MAV1, SERIAL1 = MAV2,
+# SERIAL2 = MAV3 when all three run MAVLink); check the index on the FC before loading.
+MAV3_RAW_SENS 0
+MAV3_EXT_STAT 0
+MAV3_RC_CHAN 0
+MAV3_RAW_CTRL 0
+MAV3_POSITION 0
+MAV3_EXTRA1 0
+MAV3_EXTRA2 0
+MAV3_EXTRA3 0
+MAV3_PARAMS 0
+MAV3_ADSB 0
+
+# --- proximity: one virtual sensor from OBSTACLE_DISTANCE ---
+PRX1_TYPE 2
+PRX1_ORIENT 0
+PRX1_YAW_CORR 0
+# not used in V1: the ground is handled by the module (MAP-14...MAP-17)
+PRX_IGN_GND 0
+
+# --- Simple Avoidance off (no proximity bit; 1 = fence only is also allowed): manual modes unaffected ---
+AVOID_ENABLE 0
+
+# --- BendyRuler in AUTO / GUIDED / RTL ---
+OA_TYPE 1
+OA_BR_TYPE 1
+# * margin to obstacles (T-13, T-23); not reduced to "get" an avoidance
+OA_MARGIN_MAX 1.0
+# * <= MAX_DIST_CM of the module (3 m)
+OA_BR_LOOKAHEAD 3
+# * memory of obstacles seen before a turn (T-13)
+OA_DB_EXPIRE 10
+OA_DB_SIZE 200
+OA_DB_QUEUE_SIZE 100
+# * map sector width (5 deg)
+OA_DB_BEAM_WIDTH 5
+# <= MAX_DIST_CM
+OA_DB_DIST_MAX 3
+# * ground reserve near Home: off (the strict case), checked by T-26
+OA_DB_ALT_MIN 0
+# database items to the GCS (T-25: no ground objects)
+OA_DB_OUTPUT 3
+
+# --- GUIDED position targets through WPNav, so BendyRuler applies in GUIDED (4.7.2: GUID_OPTIONS bit 6) ---
+GUID_OPTIONS 64
+
+# --- missions ---
+# nose along the path: the sensors look where the vehicle goes
+WP_YAW_BEHAVIOR 1
+# * SPD-02 (T-23): until then 1 m/s, never above 2 m/s
+WP_SPD 1.0
+RTL_SPEED_MS 1.0
+
+# --- avoidance switch (TZ section 8). DEV-13: in 4.7.2 option 40 switches Simple Avoidance only, not BendyRuler ---
+RC7_OPTION 40

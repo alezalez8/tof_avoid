@@ -250,7 +250,7 @@ class Gcs:
     KEEP = {"HEARTBEAT", "STATUSTEXT", "COMMAND_ACK", "LOCAL_POSITION_NED", "SYS_STATUS", "EXTENDED_SYS_STATE",
             "ADSB_VEHICLE", "OBSTACLE_DISTANCE", "DISTANCE_SENSOR", "MISSION_CURRENT", "MISSION_ITEM_REACHED",
             "ATTITUDE", "VFR_HUD", "RC_CHANNELS", "MISSION_REQUEST_INT",
-            "MISSION_REQUEST", "MISSION_ACK"}
+            "MISSION_REQUEST", "MISSION_ACK", "PARAM_VALUE"}
 
     def __init__(self, run_dir):
         self.dir = Path(run_dir)
@@ -368,6 +368,20 @@ class Gcs:
             self.m.mav.param_set_send(FC_SYSID, 1, name.encode(), float(value),
                                       mavutil.mavlink.MAV_PARAM_TYPE_REAL32)
 
+    def apply_params(self, params, timeout=10.0):
+        """PARAM_SET each value and wait for its PARAM_VALUE echo; returns names not confirmed."""
+        t0 = time.time()
+        for k, v in params.items():
+            self.set_param(k, v)
+            time.sleep(0.01)
+        pending = set(params)
+        while pending and time.time() - t0 < timeout:
+            for t, m in self.history("PARAM_VALUE", 1, t0):
+                if m.param_id in pending and abs(m.param_value - float(params[m.param_id])) < 1e-3:
+                    pending.discard(m.param_id)
+            time.sleep(0.1)
+        return sorted(pending)
+
     def set_mode(self, name, wait=True, timeout=5.0):
         mid = COPTER_MODES[name]
         self.command(mavutil.mavlink.MAV_CMD_DO_SET_MODE, mavutil.mavlink.MAV_MODE_FLAG_CUSTOM_MODE_ENABLED, mid)
@@ -456,8 +470,15 @@ class Stand:
         self.sitl.start()
         self.gcs = Gcs(self.dir)  # SERIAL0 waits for this connection
         self.gcs.wait(lambda: self.gcs.latest("HEARTBEAT") is not None, 30, "FC heartbeat")
-        for mid, hz in ((32, 10), (1, 5), (245, 5), (246, 20), (30, 10), (330, 10), (132, 10)):
+        for mid, hz in ((32, 10), (1, 5), (245, 5), (246, 20), (30, 10), (132, 10)):
             self.gcs.interval(mid, hz)
+        # Parameters of objects created at boot from an ENABLE parameter (OA_BR_*) ignore the defaults
+        # files after a wipe: set the whole SITL set once more over MAVLink.
+        want = read_param_file(ROOT / "params" / "sitl_tof.param")
+        want.update({k: float(v) for k, v in (self.sitl.params or {}).items()})
+        missing = self.gcs.apply_params(want)
+        if missing:
+            raise RuntimeError("FC parameters not confirmed: %s" % missing)
         if scene:
             self.scene.start()
         if module:
@@ -494,3 +515,41 @@ class Stand:
     def summary(self):
         return {"run_dir": str(self.dir), "sitl_cmd": (self.dir / "sitl_cmd.txt").read_text().strip(),
                 "fc_params_crc": param_file_crc(self.sitl.param_files)}
+
+
+# ---------------------------------------------------------------- FC logs
+
+def read_param_file(path):
+    out = {}
+    for line in Path(path).read_text().splitlines():
+        f = line.split("#")[0].replace(",", " ").split()
+        if len(f) == 2:
+            out[f[0]] = float(f[1])
+    return out
+
+
+def bin_messages(path, types):
+    """Messages of the given types from a dataflash log: list of (type, msg)."""
+    m = mavutil.mavlink_connection(str(path))
+    out = []
+    while True:
+        x = m.recv_match(type=list(types))
+        if x is None:
+            return out
+        out.append(x)
+
+
+def fc_param_mismatches(stand, files=None):
+    """Parameters of the files that the FC does not have (unknown name) or holds with another value."""
+    want = {}
+    for f in files or [ROOT / "params" / "sitl_tof.param"]:
+        want.update(read_param_file(f))
+    if stand.sitl.params:
+        want.update({k: float(v) for k, v in stand.sitl.params.items()})
+    logs = stand.sitl.bin_logs()
+    if not logs:
+        return ["no dataflash log"]
+    got = {}
+    for x in bin_messages(logs[0], ["PARM"]):
+        got[x.Name] = x.Value
+    return [(k, v, got.get(k)) for k, v in want.items() if k not in got or abs(got[k] - v) > 1e-3]

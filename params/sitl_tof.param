@@ -1,0 +1,79 @@
+# tof_avoid: ArduCopter 4.7.2 SITL parameters (TZ section 8), loaded after
+# Tools/autotest/default_params/copter.parm and copter-hexa.parm with --defaults.
+# The real-FC set is params/fc_tof_v1.param; values marked * are tuned by tests.
+# Port layout of SITL instance 5 (-I 5, base 5810):
+#   SERIAL0 tcp 5810 - test GCS (pytest scenario), SERIAL1 tcp 5812 - scene.py pose link (SITL only),
+#   SERIAL2 tcp 5813 - the module (tof_sil), as the module UART on the real FC.
+
+# --- module port (SERIAL2) ---
+SERIAL2_PROTOCOL 2
+SERIAL2_BAUD 115
+SERIAL2_OPTIONS 0
+# The module requests its streams with SET_MESSAGE_INTERVAL; nothing else on its UART.
+# 4.7.2: stream rates are MAVn_* by MAVLink channel order (SERIAL0 = MAV1, SERIAL1 = MAV2, SERIAL2 = MAV3).
+MAV3_RAW_SENS 0
+MAV3_EXT_STAT 0
+MAV3_RC_CHAN 0
+MAV3_RAW_CTRL 0
+MAV3_POSITION 0
+MAV3_EXTRA1 0
+MAV3_EXTRA2 0
+MAV3_EXTRA3 0
+MAV3_PARAMS 0
+MAV3_ADSB 0
+
+# --- scene.py pose link (SERIAL1, SITL only) ---
+SERIAL1_PROTOCOL 2
+SERIAL1_BAUD 921
+
+# --- proximity: one virtual sensor from OBSTACLE_DISTANCE ---
+PRX1_TYPE 2
+PRX1_ORIENT 0
+PRX1_YAW_CORR 0
+PRX_IGN_GND 0
+
+# --- Simple Avoidance off (no proximity bit): manual modes are not affected ---
+AVOID_ENABLE 0
+
+# --- BendyRuler in AUTO / GUIDED / RTL ---
+OA_TYPE 1
+OA_BR_TYPE 1
+# * margin to obstacles; not reduced to "get" an avoidance
+OA_MARGIN_MAX 1.0
+# * <= MAX_DIST_CM of the module (3 m)
+OA_BR_LOOKAHEAD 3
+# * memory of obstacles seen before a turn
+OA_DB_EXPIRE 10
+OA_DB_SIZE 200
+OA_DB_QUEUE_SIZE 100
+# * sector width of the map (5 deg)
+OA_DB_BEAM_WIDTH 5
+OA_DB_DIST_MAX 3
+# * ground reserve around Home: off, the module handles the ground (checked by T-26)
+OA_DB_ALT_MIN 0
+# all database items to the GCS (ADSB_VEHICLE), used by T-25 / T-26 checks
+OA_DB_OUTPUT 3
+
+# --- GUIDED position targets through WPNav, so BendyRuler applies in GUIDED (4.7.2: GUID_OPTIONS bit 6) ---
+GUID_OPTIONS 64
+
+# --- missions ---
+WP_YAW_BEHAVIOR 1
+# * SPD-02 not measured yet: 1 m/s (TZ section 9 illustration for R = 1.5 m)
+WP_SPD 1.0
+RTL_SPEED_MS 1.0
+
+# --- avoidance switch (TZ section 8; see DEV-13) ---
+RC7_OPTION 40
+
+# --- downward rangefinder (MTF-01 stand-in), up to 7 m ---
+RNGFND1_TYPE 100
+RNGFND1_ORIENT 25
+RNGFND1_MIN 0.05
+RNGFND1_MAX 7.0
+# SITL only: the rangefinder 0.10 m above the ground on the landing gear (reads ~0.10 m when landed);
+# the ToF optics are 0.20 m above the ground (module RF_Z_M = 0.10, params/module_sitl.json)
+SIM_SONAR_POS_Z -0.10
+
+# --- logs ---
+LOG_DISARMED 0

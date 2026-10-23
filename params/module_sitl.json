@@ -1,0 +1,4 @@
+{
+  "_comment": "Module parameters for SITL (tof_sil), on top of the table defaults (core/include/core/params_table.h). Geometry of the SITL vehicle: ToF optics 0.20 m above the ground (TOF_HEIGHT_GROUND_M default), sensors at the body centre (MOUNT_XYZ_M = 0), rangefinder 0.10 m below them (SIM_SONAR_POS_Z = -0.10 in params/sitl_tof.param).",
+  "RF_Z_M": 0.10
+}
