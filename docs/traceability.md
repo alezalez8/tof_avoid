@@ -23,7 +23,7 @@
 | SNS-08 | Готовность кадра по INT или опрос ≤ 5 мс | — | T-05 | todo |
 | SNS-09 | Метаданные кадра: ID датчика, номер, время мкс, режим, частота | — | T-05 | todo |
 | SNS-10 | Таймаут SPI-транзакции ≤ 10 мс | — | Ревью + T-07 | todo |
-| SNS-11 | Отказ датчика → переинициализация только его; ≤ 1 с; FAILED с повтором 10 с | — | T-07 | todo |
+| SNS-11 | Отказ датчика → переинициализация только его; ≤ 1 с; FAILED с повтором 10 с | `core/src/sensor_health.c`: `sh_on_error`, `sh_update`, `sh_on_reinit_done`, `sh_take_reinit_request` (решение в ядре; переинициализацию выполняет драйвер — E4/E5) | T-00: `test_sensor_health` `test_SNS11_*` — pass; T-07 — E5 | impl |
 | SNS-12 | Ориентация матрицы (поворот/зеркало) на датчик — в конфигурации | `ORIENT_TRANSFORM_L/C/R` в `params_table.h`; `core/src/geometry.c`: `geo_orient_apply`, `geo_zone_from_raw` | T-00: `test_MAP02_orient_*` — pass; T-06 — E7 | impl |
 | SNS-13 | Калибровка Xtalk, хранение во Flash | — | T-08 | todo |
 
