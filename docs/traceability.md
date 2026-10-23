@@ -21,7 +21,7 @@
 | SNS-06 | Ближайшая цель, 2 цели на зону, только нужные выходы ULD | `core/include/core/frame.h` (`tof_zone_t`: 6 выходов SNS-06), `TOF_TARGETS_PER_ZONE` в `config.h`; `quality_zone_eval` (≤ 2 цели) | T-00: `test_MAP03_zone_*` — pass; размер кадра в логе — E4 | impl |
 | SNS-07 | Расписание захвата SIMULTANEOUS / STAGGERED | — | T-04 | todo |
 | SNS-08 | Готовность кадра по INT или опрос ≤ 5 мс | — | T-05 | todo |
-| SNS-09 | Метаданные кадра: ID датчика, номер, время мкс, режим, частота | — | T-05 | todo |
+| SNS-09 | Метаданные кадра: ID датчика, номер, время мкс, режим, частота | `core/include/core/frame.h` (`tof_frame_t`); `core/src/tof_core.c`: `tof_core_push_frame` (проверка режима/частоты, счётчик пропусков номеров) | T-00: `test_tof_core` `test_SNS09_*` — pass; T-05 — E5 | impl |
 | SNS-10 | Таймаут SPI-транзакции ≤ 10 мс | — | Ревью + T-07 | todo |
 | SNS-11 | Отказ датчика → переинициализация только его; ≤ 1 с; FAILED с повтором 10 с | `core/src/sensor_health.c`: `sh_on_error`, `sh_update`, `sh_on_reinit_done`, `sh_take_reinit_request` (решение в ядре; переинициализацию выполняет драйвер — E4/E5) | T-00: `test_sensor_health` `test_SNS11_*` — pass; T-07 — E5 | impl |
 | SNS-12 | Ориентация матрицы (поворот/зеркало) на датчик — в конфигурации | `ORIENT_TRANSFORM_L/C/R` в `params_table.h`; `core/src/geometry.c`: `geo_orient_apply`, `geo_zone_from_raw` | T-00: `test_MAP02_orient_*` — pass; T-06 — E7 | impl |
@@ -114,14 +114,14 @@
 | ID | Требование (кратко) | Файл / функция | Тест | Статус |
 | --- | --- | --- | --- | --- |
 | SW-01 | Сборка CubeCLT + CMake + Ninja без IDE | `CMakeLists.txt`, `CMakePresets.json`, `cmake/arm-none-eabi-cortex-m4f.cmake`, `tools/scripts/build_target_check.ps1` (пока только `target-check`) | Сборка из командной строки | todo |
-| SW-02 | core/: C11, без HAL, без malloc/рекурсии, только float; покрытие ≥ 90 % | `cmake/TofCompilerFlags.cmake`, `cmake/check_target_lib.cmake`, `tools/scripts/coverage.sh` | Отчёт покрытия | todo |
+| SW-02 | core/: C11, без HAL, без malloc/рекурсии, только float; покрытие ≥ 90 % | `cmake/TofCompilerFlags.cmake` (`-Wdouble-promotion`, `-Wvla`), `cmake/check_target_lib.cmake` (нет double-хелперов), `tools/scripts/coverage.sh`; API ядра `core/src/tof_core.c` (время — аргументом) | Отчёт покрытия E1a: строки 99,1 %, ветви 96,4 % — pass | pass |
 | SW-03 | `bsp.h` — единственная точка доступа к железу | — (E2) | Ревью | todo |
 | SW-04 | ULD и MAVLink в third_party без изменений; platform-слой через bsp.h | `third_party/mavlink/c_library_v2` (submodule) | Diff с оригиналом | todo |
 | SW-05 | Кооперативный суперцикл, худшая итерация ≤ 5 мс | — | T-11 | todo |
 | SW-06 | Flash и RAM ≤ 80 % | — | Map-файл + T-11 | todo |
 | SW-07 | Таблица параметров, слоты A/B с CRC-32 | `core/include/core/params_table.h` (таблица), `core/src/params.c`: `params_set_*`, `params_validate`, `params_store_load`, `params_store_save`; `core/src/crc32.c` | T-00: `test_params` (`test_SW07_*`, в т. ч. обрыв питания на каждом байте записи) — pass; T-17, T-27 — E6 | impl |
 | SW-08 | Сборки DEBUG / FLIGHT; assert → лог и управляемый сброс | — | T-11 | todo |
-| SW-09 | `-Wall -Wextra -Werror`, cppcheck без warning | `cmake/TofCompilerFlags.cmake`, `tools/scripts/cppcheck.sh` | Скрипт CI | todo |
+| SW-09 | `-Wall -Wextra -Werror`, cppcheck без warning | `cmake/TofCompilerFlags.cmake`, `tools/scripts/cppcheck.sh` | Скрипт CI: host и target-check без предупреждений, cppcheck 2.7 без замечаний (E1a) — pass | pass |
 | SW-10 | Semver + git-хеш в прошивке; CHANGELOG.md | `core/include/core/version.h`, `core/src/version.c`: `tof_version_string`, `tof_version_git_hash`, `tof_version_number`; `CHANGELOG.md` | T-00: `test_SW10_*` | todo |
 | SW-11 | Точки расширения для будущего планировщика | — | Ревью | todo |
 

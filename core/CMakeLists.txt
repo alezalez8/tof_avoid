@@ -6,7 +6,8 @@ add_library(tof_core STATIC
     src/quality.c
     src/cell_fsm.c
     src/sensor_health.c
-    src/fusion.c)
+    src/fusion.c
+    src/tof_core.c)
 
 target_include_directories(tof_core PUBLIC include)
 target_compile_definitions(tof_core PRIVATE TOF_GIT_HASH="${TOF_GIT_HASH}")

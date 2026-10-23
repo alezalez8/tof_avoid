@@ -453,9 +453,8 @@ void test_MAP13_map_holds_obstacle_on_invalid_frames_then_unknown(void)
     zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 5u);
     push(TOF_SENSOR_C);
     fusion_run(&g_f, k_all_ok, T0);
-    uint32_t t = T0;
     uint16_t d[TOF_NUM_SECTORS];
-    for (t = T0 + 66u * MS; t <= T0 + 500u * MS; t += 66u * MS) {
+    for (uint32_t t = T0 + 66u * MS; t <= T0 + 500u * MS; t += 66u * MS) {
         frame_empty(TOF_SENSOR_C, t);
         zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 255u); /* invalid */
         push(TOF_SENSOR_C);
