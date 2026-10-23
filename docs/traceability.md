@@ -34,14 +34,14 @@
 | MAP-01 | Системы координат и знаки по 5.1 | `core/src/geometry.c`: `geo_rot_x/y/z`, `geo_dir_sensor`, `geo_zone_alpha_deg`, `geo_zone_beta_deg` | T-00: `test_MAP01_*` — pass; T-06 — E7 | impl |
 | MAP-02 | Направления зон и преобразования ZYX; угловая протяжённость зоны | `core/src/geometry.c`: `geo_mount_init` (Rz·Ry·Rx), `geo_sensor_to_body`, `geo_body_to_level`, `geo_zone_extent`, `geo_point_height`, `geo_orient_apply/inverse` | T-00: `test_geometry` `test_MAP02_*` — весь список критерия (yaw/pitch/roll ±, −θ/0/+θ, тангаж/крен ±15°, высоты 0,2/1/7 м, зеркалирование, перекрытие, XYZ, обратимость) — pass | pass |
 | MAP-03 | Валидность цели: status ∈ VALID_STATUS, sigma, signal | `core/src/quality.c`: `quality_target_valid`, `quality_zone_eval` | T-00: `test_quality` `test_MAP03_*` — pass; T-10 — E7 | impl |
-| MAP-04 | Горизонтальная дистанция и азимут в корпусной СК; ROW_MASK | — | Юнит-тест | todo |
-| MAP-05 | Сетка 72 × 5°, зоны по протяжённости + CAL_TOL_DEG, без интерполяции | — | Юнит-тест | todo |
+| MAP-04 | Горизонтальная дистанция и азимут в корпусной СК; ROW_MASK | `core/src/geometry.c`: `geo_horiz_dist`, `geo_azimuth_deg`, `geo_zone_target`; `core/src/fusion.c`: `classify_zone` (d с учётом t_m), `fusion_init` (ROW_MASK) | T-00: `test_MAP04_*`, `test_MAP02_three_sensors_zone_azimuths` — pass | pass |
+| MAP-05 | Сетка 72 × 5°, зоны по протяжённости + CAL_TOL_DEG, без интерполяции | `core/src/fusion.c`: `fusion_init` (маски сектор→зоны), `step_sector` (правила перекрытия 5.3), `fusion_export` | T-00: `test_fusion` `test_MAP05_*` — pass | pass |
 | MAP-06 | GROUND_SUSPECT по MAP-14 и MAP-18 | — | — | todo |
 | MAP-07 | GROUND_POLICY только в FLIGHT; DROP запрещён до T-22, T-25, T-26 | — | Конфигурация + T-22 | todo |
 | MAP-08 | Исключён, заменён MAP-13 | — | — | n/a |
-| MAP-09 | Объединение кадров в FUSION_WINDOW_MS; время ячейки по самому старому вкладу | — | Юнит-тест | todo |
-| MAP-10 | Здоровье датчика OK / DEGRADED / FAILED; ячейки неисправного — INV | — | Юнит-тест + T-07 | todo |
-| MAP-11 | Состояние карты OK / DEGRADED / LOST | — | Юнит-тест | todo |
+| MAP-09 | Объединение кадров в FUSION_WINDOW_MS; время ячейки по самому старому вкладу | `core/src/fusion.c`: `fusion_ready`, `fusion_run`, `step_sector` (`cell_t_us`), `fusion_export_state` (STALE) | T-00: `test_fusion` `test_MAP09_*` — pass | pass |
+| MAP-10 | Здоровье датчика OK / DEGRADED / FAILED; ячейки неисправного — INV | `core/src/sensor_health.c`: `sh_update` (health), `sh_on_frame`; `core/src/fusion.c`: `fusion_push_frame` (доля валидных зон), `fusion_run` (FAILED → INV) | T-00: `test_MAP10_*` в `test_sensor_health`, `test_fusion` — pass; T-07 — E5 | impl |
+| MAP-11 | Состояние карты OK / DEGRADED / LOST | `core/src/fusion.c`: `fusion_map_state` | T-00: `test_MAP11_*` — pass | pass |
 | MAP-12 | Задержки t1…t5 по p99 | — | T-11 | todo |
 | MAP-13 | Автомат удержания и снятия препятствия (таблица 5.3) | `core/src/cell_fsm.c`: `cell_fsm_step` (`step_occ`, `step_clr`, `step_inv`), `cell_cfg_from_params` | T-00: `test_cell_fsm` `test_MAP13_*` — каждый переход таблицы 5.3 отдельным тестом — pass | pass |
 | MAP-14 | «Луч — земля» по протяжённости зоны, GROUND_TOL_M | — | Юнит-тест + T-22, T-25 | todo |
