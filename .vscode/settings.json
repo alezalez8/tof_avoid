@@ -1,0 +1,17 @@
+{
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnType": false,
+    "editor.formatOnPaste": false
+  },
+  "[json]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false
+  },
+  "[jsonc]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnPaste": false
+  },
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": false
+}

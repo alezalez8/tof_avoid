@@ -1,0 +1,30 @@
+# Build trees
+build/
+out/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# SITL run directories and logs
+logs/
+*.tlog
+*.tlog.raw
+*.BIN
+eeprom.bin
+mav.parm
+
+# Coverage
+*.gcda
+*.gcno
+coverage/
+
+# Editor
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+!.vscode/launch.json
