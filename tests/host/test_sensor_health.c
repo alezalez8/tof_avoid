@@ -274,6 +274,21 @@ void test_MAP10_missing_frames_degraded_then_failed(void)
     TEST_ASSERT_EQUAL_INT(SENSOR_FAILED, g_s.health);
 }
 
+/* MAP-10a: high median ambient for longer than DEGRADED_TIME_MS -> DEGRADED, even with all zones valid. */
+void test_MAP10a_ambient_high_degrades_after_300ms(void)
+{
+    for (uint32_t t = 0; t <= 300u * MS; t += 50u * MS) {
+        sh_on_frame(&g_s, &g_cfg, 1.0f, true, t);
+        sh_update(&g_s, &g_cfg, t);
+    }
+    TEST_ASSERT_EQUAL_INT(SENSOR_OK, g_s.health); /* exactly 300 ms */
+    sh_update(&g_s, &g_cfg, 300u * MS + 1u);
+    TEST_ASSERT_EQUAL_INT(SENSOR_DEGRADED, g_s.health);
+    sh_on_frame(&g_s, &g_cfg, 1.0f, false, 310u * MS);
+    sh_update(&g_s, &g_cfg, 310u * MS);
+    TEST_ASSERT_EQUAL_INT(SENSOR_OK, g_s.health);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -294,5 +309,6 @@ int main(void)
     RUN_TEST(test_MAP10_fraction_equal_to_min_is_ok);
     RUN_TEST(test_MAP10_short_low_fraction_stays_ok);
     RUN_TEST(test_MAP10_missing_frames_degraded_then_failed);
+    RUN_TEST(test_MAP10a_ambient_high_degrades_after_300ms);
     return UNITY_END();
 }

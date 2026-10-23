@@ -446,6 +446,40 @@ void test_SW07_save_after_boot_read_error_beats_existing_slot(void)
     TEST_ASSERT_EQUAL_UINT32(444u, params_get_u32(&p, PARAM_HOLD_MAX_MS));
 }
 
+/* MAP-07a: without TOF_ALLOW_GROUND_DROP the value DROP is rejected by set and by load. */
+void test_MAP07a_drop_rejected_without_build_flag(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(0u, TOF_ALLOW_GROUND_DROP);
+    TEST_ASSERT_EQUAL_INT(PARAMS_ERR_RANGE, params_set_u32(&g_p, PARAM_GROUND_POLICY, PARAM_GROUND_DROP));
+    TEST_ASSERT_EQUAL_UINT32(PARAM_GROUND_KEEP, params_get_u32(&g_p, PARAM_GROUND_POLICY));
+
+    /* A slot with DROP and a correct CRC (written by a DROP-enabled build) is not loaded. */
+    params_t p;
+    (void)params_store_load(&g_store, &g_flash.api, &p);
+    (void)params_store_save(&g_store, &g_p, false); /* A, seq 1 */
+    uint8_t *img = g_flash.mem[PARAMS_SLOT_A];
+    img[PARAMS_HEADER_SIZE + 4u * (uint32_t)PARAM_GROUND_POLICY] = (uint8_t)PARAM_GROUND_DROP;
+    uint32_t crc = crc32_update(CRC32_INIT, img, 20u);
+    crc = crc32_final(crc32_update(crc, &img[PARAMS_HEADER_SIZE], 4u * (uint32_t)PARAM_COUNT));
+    img[20] = (uint8_t)crc;
+    img[21] = (uint8_t)(crc >> 8);
+    img[22] = (uint8_t)(crc >> 16);
+    img[23] = (uint8_t)(crc >> 24);
+    TEST_ASSERT_EQUAL_INT(PARAMS_LOADED_DEFAULTS, params_store_load(&g_store, &g_flash.api, &p));
+    TEST_ASSERT_EQUAL_UINT32(PARAM_GROUND_KEEP, params_get_u32(&p, PARAM_GROUND_POLICY));
+}
+
+/* SNS-12a, MAP-10a: new parameters and their defaults; format version bumped. */
+void test_SNS12a_MAP10a_new_parameters(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(0u, params_get_u32(&g_p, PARAM_ORIENT_CONFIRMED));
+    TEST_ASSERT_EQUAL_INT(PARAMS_ERR_RANGE, params_set_u32(&g_p, PARAM_ORIENT_CONFIRMED, 2u));
+    TEST_ASSERT_EQUAL_UINT32(0u, params_get_u32(&g_p, PARAM_AMBIENT_DEGRADED));
+    TEST_ASSERT_EQUAL_INT((int)PARAM_ORIENT_CONFIRMED, (int)params_find("ORIENT_CONFIRMED"));
+    TEST_ASSERT_EQUAL_INT((int)PARAM_AMBIENT_DEGRADED, (int)params_find("AMBIENT_DEGRADED"));
+    TEST_ASSERT_EQUAL_UINT32(2u, PARAMS_FORMAT_VERSION);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -476,5 +510,7 @@ int main(void)
     RUN_TEST(test_SW07_power_cut_during_first_save_gives_defaults_or_new);
     RUN_TEST(test_SW07_validate_row_mask_keeps_an_active_row);
     RUN_TEST(test_SW07_save_after_boot_read_error_beats_existing_slot);
+    RUN_TEST(test_MAP07a_drop_rejected_without_build_flag);
+    RUN_TEST(test_SNS12a_MAP10a_new_parameters);
     return UNITY_END();
 }

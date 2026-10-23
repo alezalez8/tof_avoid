@@ -51,6 +51,20 @@ static void push(uint8_t s)
     TEST_ASSERT_TRUE(fusion_push_frame(&g_f, &g_fr[s]));
 }
 
+/* Every zone of every sensor reports a valid target beyond max_distance (3.5 m). */
+static void push_far_all(uint32_t t)
+{
+    for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
+        frame_empty(s, t);
+        for (uint8_t i = 0; i < 4u; i++) {
+            for (uint8_t j = 0; j < 4u; j++) {
+                zone_target(s, i, j, 3500, 5u);
+            }
+        }
+        push(s);
+    }
+}
+
 static void push_empty_all(uint32_t t)
 {
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
@@ -416,14 +430,20 @@ void test_MAP10_degraded_sensor_still_reports_obstacles(void)
     TEST_ASSERT_EQUAL_INT(CELL_OCCUPIED, g_f.cell[1].state);
 }
 
-void test_MAP10_valid_fraction_of_frame(void)
+/* MAP-10a: valid / (valid + invalid) among zones with a target; empty zones are not counted. */
+void test_MAP10a_valid_fraction_counts_only_zones_with_target(void)
 {
     frame_empty(TOF_SENSOR_C, T0);
     for (uint8_t j = 0; j < 4u; j++) {
-        zone_target(TOF_SENSOR_C, 0u, j, 1000, 255u); /* 4 of 16 zones invalid */
+        zone_target(TOF_SENSOR_C, 0u, j, 1000, 255u); /* 4 invalid */
     }
+    zone_target(TOF_SENSOR_C, 1u, 0u, 1000, 5u); /* 1 valid; 11 zones without a target */
     push(TOF_SENSOR_C);
-    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.75f, g_f.frame[TOF_SENSOR_C].valid_frac);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.2f, g_f.frame[TOF_SENSOR_C].valid_frac);
+    /* No zone with a target (open space): not degraded. */
+    frame_empty(TOF_SENSOR_C, T0);
+    push(TOF_SENSOR_C);
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.0f, g_f.frame[TOF_SENSOR_C].valid_frac);
 }
 
 /* ---- MAP-11: map state ---- */
@@ -508,15 +528,16 @@ void test_MAP09_frame_stamped_after_now_is_used(void)
     TEST_ASSERT_EQUAL_INT(EXPORT_OCCUPIED, fusion_export_state(&g_f, 1u, T0));
 }
 
-/* Default (CLEAR_MEASURED off): confirmed CLR releases to UNKNOWN after 3 frames, not by hold expiry. */
-void test_MAP13_map_default_release_by_clr_to_unknown(void)
+/* MAP-13a, CLEAR_MEASURED off: valid targets beyond max_distance release to UNKNOWN after 3 frames,
+ * not by hold expiry. */
+void test_MAP13a_off_release_by_targets_beyond_max(void)
 {
     frame_empty(TOF_SENSOR_C, T0);
     zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 5u);
     push(TOF_SENSOR_C);
     fusion_run(&g_f, k_all_ok, T0);
     for (uint32_t n = 1; n <= 3u; n++) {
-        push_empty_all(T0 + n * 66u * MS);
+        push_far_all(T0 + n * 66u * MS);
         fusion_run(&g_f, k_all_ok, T0 + n * 66u * MS);
         TEST_ASSERT_EQUAL_INT(n < 3u ? CELL_OCCUPIED : CELL_UNKNOWN, g_f.cell[1].state);
     }
@@ -529,6 +550,142 @@ void test_MAP02_extent_is_stored_per_zone(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-3f, -22.5f, g_f.extent[TOF_SENSOR_C][1u * 4u + 0u].az_min_deg);
     TEST_ASSERT_FLOAT_WITHIN(1e-3f, 52.5f, g_f.extent[TOF_SENSOR_R][2u * 4u + 3u].az_max_deg);
     TEST_ASSERT_FLOAT_WITHIN(1e-3f, -11.25f, g_f.extent[TOF_SENSOR_L][3u * 4u + 0u].beta_max_deg);
+}
+
+/* MAP-13a, CLEAR_MEASURED off: a zone with nb_target = 0 is INV - the obstacle is held, not released. */
+void test_MAP13a_off_empty_zone_is_inv_and_holds(void)
+{
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 5u);
+    push(TOF_SENSOR_C);
+    fusion_run(&g_f, k_all_ok, T0);
+    for (uint32_t n = 1; n <= 7u; n++) {
+        push_empty_all(T0 + n * 66u * MS);
+        TEST_ASSERT_EQUAL_INT(ZONE_INV, g_f.frame[TOF_SENSOR_C].zone[1u * 4u + 2u].cls);
+        fusion_run(&g_f, k_all_ok, T0 + n * 66u * MS);
+        TEST_ASSERT_EQUAL_INT(CELL_OCCUPIED, g_f.cell[0].state); /* 462 ms: still held */
+    }
+    push_empty_all(T0 + 520u * MS);
+    fusion_run(&g_f, k_all_ok, T0 + 520u * MS);
+    TEST_ASSERT_EQUAL_INT(CELL_UNKNOWN, g_f.cell[0].state);
+    TEST_ASSERT_TRUE(g_f.hold_expired_total > 0u);
+}
+
+/* MAP-13a, off: only a valid target beyond max gives CLR; an invalid one beyond max is INV. */
+void test_MAP13a_off_only_valid_target_beyond_max_is_clr(void)
+{
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 0u, 0u, 3500, 5u);
+    zone_target(TOF_SENSOR_C, 0u, 1u, 3500, 4u);
+    push(TOF_SENSOR_C);
+    TEST_ASSERT_EQUAL_INT(ZONE_CLR, g_f.frame[TOF_SENSOR_C].zone[0].cls);
+    TEST_ASSERT_EQUAL_INT(ZONE_INV, g_f.frame[TOF_SENSOR_C].zone[1].cls);
+    TEST_ASSERT_EQUAL_INT(ZONE_INV, g_f.frame[TOF_SENSOR_C].zone[2].cls); /* no target */
+}
+
+/* MAP-13a, on: CLR only with ambient <= AMBIENT_CLEAR_MAX, for empty zones and for far targets. */
+void test_MAP13a_on_clr_needs_low_ambient(void)
+{
+    enable_clear(); /* AMBIENT_CLEAR_MAX = 1000 */
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 0u, 0u, 3500, 5u);
+    zone_target(TOF_SENSOR_C, 0u, 1u, 3500, 5u);
+    g_fr[TOF_SENSOR_C].zone[1].ambient_per_spad = 1001u;
+    g_fr[TOF_SENSOR_C].zone[2].ambient_per_spad = 1000u; /* empty, at the limit */
+    g_fr[TOF_SENSOR_C].zone[3].ambient_per_spad = 1001u; /* empty, above */
+    push(TOF_SENSOR_C);
+    TEST_ASSERT_EQUAL_INT(ZONE_CLR, g_f.frame[TOF_SENSOR_C].zone[0].cls);
+    TEST_ASSERT_EQUAL_INT(ZONE_INV, g_f.frame[TOF_SENSOR_C].zone[1].cls);
+    TEST_ASSERT_EQUAL_INT(ZONE_CLR, g_f.frame[TOF_SENSOR_C].zone[2].cls);
+    TEST_ASSERT_EQUAL_INT(ZONE_INV, g_f.frame[TOF_SENSOR_C].zone[3].cls);
+}
+
+/* MAP-05a: with a 10 cm lateral offset a target at 0.3 m is seen ~13 deg further right from the body
+ * centre; the sectors follow the extent at the measured range. */
+void test_MAP05a_parallax_shifts_sectors_at_short_range(void)
+{
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 1u, 1u, 300, 5u); /* alpha -11.25..0 */
+    push(TOF_SENSOR_C);
+    fusion_run(&g_f, k_all_ok, T0);
+    TEST_ASSERT_EQUAL_INT(CELL_OCCUPIED, g_f.cell[70].state); /* t_m = 0: around -5 deg */
+    TEST_ASSERT_EQUAL_INT(CELL_UNKNOWN, g_f.cell[2].state);
+
+    (void)params_set_f32(&g_p, PARAM_MOUNT_Y_M_C, 0.10f);
+    fusion_init(&g_f, &g_p);
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 1u, 1u, 300, 5u);
+    push(TOF_SENSOR_C);
+    fusion_run(&g_f, k_all_ok, T0);
+    /* Extent at 0.3 m is about 8..18.8 deg, +-2 -> sectors 1..4. */
+    assert_sectors(1u, 4u, EXPORT_OCCUPIED, T0);
+    TEST_ASSERT_EQUAL_INT(EXPORT_UNKNOWN, fusion_export_state(&g_f, 0u, T0));
+    TEST_ASSERT_EQUAL_INT(EXPORT_UNKNOWN, fusion_export_state(&g_f, 70u, T0));
+    /* Distance is from the body centre too: sqrt(0.2986^2 + 0.0706^2) = 0.307 m. */
+    uint16_t d[TOF_NUM_SECTORS];
+    fusion_export(&g_f, T0, d);
+    TEST_ASSERT_UINT16_WITHIN(1u, 30u, d[2]);
+}
+
+/* MAP-05a: the same offset at long range barely moves the coverage (parallax ~ t / r). */
+void test_MAP05a_parallax_small_at_long_range(void)
+{
+    (void)params_set_f32(&g_p, PARAM_MOUNT_Y_M_C, 0.10f);
+    fusion_init(&g_f, &g_p);
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 1u, 2u, 2900, 5u); /* alpha 0..11.25, ~2 deg shift */
+    push(TOF_SENSOR_C);
+    fusion_run(&g_f, k_all_ok, T0);
+    assert_sectors(0u, 3u, EXPORT_OCCUPIED, T0);
+    TEST_ASSERT_EQUAL_INT(EXPORT_UNKNOWN, fusion_export_state(&g_f, 71u, T0));
+}
+
+/* MAP-10a: median ambient above AMBIENT_DEGRADED marks the frame; 0 (default) disables it. */
+void test_MAP10a_ambient_median_flag(void)
+{
+    frame_empty(TOF_SENSOR_C, T0);
+    for (uint8_t z = 0; z < 16u; z++) {
+        g_fr[TOF_SENSOR_C].zone[z].ambient_per_spad = 5000u;
+    }
+    push(TOF_SENSOR_C);
+    TEST_ASSERT_EQUAL_UINT32(5000u, g_f.frame[TOF_SENSOR_C].ambient_median);
+    TEST_ASSERT_FALSE(g_f.frame[TOF_SENSOR_C].ambient_high); /* off by default */
+
+    (void)params_set_u32(&g_p, PARAM_AMBIENT_DEGRADED, 100u);
+    fusion_init(&g_f, &g_p);
+    frame_empty(TOF_SENSOR_C, T0);
+    for (uint8_t z = 0; z < 8u; z++) {
+        g_fr[TOF_SENSOR_C].zone[z].ambient_per_spad = 200u - z; /* 8 high, 8 zero */
+    }
+    push(TOF_SENSOR_C);
+    TEST_ASSERT_TRUE(g_f.frame[TOF_SENSOR_C].ambient_high); /* median = upper middle = 193 */
+    frame_empty(TOF_SENSOR_C, T0);
+    for (uint8_t z = 0; z < 7u; z++) {
+        g_fr[TOF_SENSOR_C].zone[z].ambient_per_spad = 200u;
+    }
+    push(TOF_SENSOR_C);
+    TEST_ASSERT_EQUAL_UINT32(0u, g_f.frame[TOF_SENSOR_C].ambient_median);
+    TEST_ASSERT_FALSE(g_f.frame[TOF_SENSOR_C].ambient_high);
+}
+
+/* SNS-12a: while ORIENT_CONFIRMED = 0 the map is never OK (at most DEGRADED); LOST stays LOST. */
+void test_SNS12a_map_not_ok_until_orientation_confirmed(void)
+{
+    const sensor_health_t none_ok[3] = {SENSOR_FAILED, SENSOR_FAILED, SENSOR_DEGRADED};
+    TEST_ASSERT_FALSE(g_f.orient_confirmed);
+    TEST_ASSERT_EQUAL_INT(MAP_DEGRADED, g_f.state);
+    TEST_ASSERT_EQUAL_INT(MAP_DEGRADED, fusion_map_state_cfg(&g_f, k_all_ok));
+    TEST_ASSERT_EQUAL_INT(MAP_LOST, fusion_map_state_cfg(&g_f, none_ok));
+    push_empty_all(T0);
+    fusion_run(&g_f, k_all_ok, T0);
+    TEST_ASSERT_EQUAL_INT(MAP_DEGRADED, g_f.state);
+
+    (void)params_set_u32(&g_p, PARAM_ORIENT_CONFIRMED, 1u);
+    fusion_init(&g_f, &g_p);
+    TEST_ASSERT_EQUAL_INT(MAP_OK, fusion_map_state_cfg(&g_f, k_all_ok));
+    push_empty_all(T0);
+    fusion_run(&g_f, k_all_ok, T0);
+    TEST_ASSERT_EQUAL_INT(MAP_OK, g_f.state);
 }
 
 int main(void)
@@ -555,12 +712,19 @@ int main(void)
     RUN_TEST(test_MAP09_stale_after_max_age);
     RUN_TEST(test_MAP10_failed_sensor_zones_are_inv);
     RUN_TEST(test_MAP10_degraded_sensor_still_reports_obstacles);
-    RUN_TEST(test_MAP10_valid_fraction_of_frame);
+    RUN_TEST(test_MAP10a_valid_fraction_counts_only_zones_with_target);
     RUN_TEST(test_MAP11_map_state_ok_degraded_lost);
     RUN_TEST(test_MAP13_map_holds_obstacle_on_invalid_frames_then_unknown);
     RUN_TEST(test_MAP13_map_closer_immediate_farther_after_relax);
     RUN_TEST(test_MAP09_frame_stamped_after_now_is_used);
-    RUN_TEST(test_MAP13_map_default_release_by_clr_to_unknown);
+    RUN_TEST(test_MAP13a_off_release_by_targets_beyond_max);
     RUN_TEST(test_MAP02_extent_is_stored_per_zone);
+    RUN_TEST(test_MAP13a_off_empty_zone_is_inv_and_holds);
+    RUN_TEST(test_MAP13a_off_only_valid_target_beyond_max_is_clr);
+    RUN_TEST(test_MAP13a_on_clr_needs_low_ambient);
+    RUN_TEST(test_MAP05a_parallax_shifts_sectors_at_short_range);
+    RUN_TEST(test_MAP05a_parallax_small_at_long_range);
+    RUN_TEST(test_MAP10a_ambient_median_flag);
+    RUN_TEST(test_SNS12a_map_not_ok_until_orientation_confirmed);
     return UNITY_END();
 }

@@ -13,6 +13,8 @@ static tof_frame_t g_fr;
 void setUp(void)
 {
     params_set_defaults(&g_p);
+    /* Most tests check MAP-11 with health only; SNS-12a (default 0) is tested separately. */
+    (void)params_set_u32(&g_p, PARAM_ORIENT_CONFIRMED, 1u);
     tof_core_init(&g_c, &g_p, 0u);
 }
 
@@ -179,6 +181,98 @@ void test_MAP09_core_does_not_wait_for_reinit_sensor(void)
     TEST_ASSERT_TRUE(tof_core_update(&g_c, t));
 }
 
+static void init_staggered(void)
+{
+    (void)params_set_u32(&g_p, PARAM_SCHEDULE, PARAM_SCHEDULE_STAGGERED);
+    tof_core_init(&g_c, &g_p, 0u);
+}
+
+/* MAP-09a: in STAGGERED every new frame of any sensor gives a map; t1 is that frame's time. */
+void test_MAP09a_staggered_map_on_every_frame(void)
+{
+    init_staggered();
+    uint32_t maps = 0u;
+    for (uint32_t k = 0; k < 6u; k++) {
+        for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
+            const uint32_t t = k * PERIOD_US + s * (PERIOD_US / 3u);
+            make_frame(s, k, t, 2000);
+            TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(&g_c, &g_fr, t));
+            TEST_ASSERT_EQUAL_UINT32(t, g_c.fusion.t1_us);
+            maps += tof_core_update(&g_c, t) ? 1u : 0u;
+            TEST_ASSERT_FALSE(tof_core_update(&g_c, t + 1u)); /* no extra map without a frame */
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(18u, maps);
+    TEST_ASSERT_EQUAL_UINT32(18u, g_c.fusion.map_seq);
+    uint16_t d[TOF_NUM_SECTORS];
+    tof_core_export(&g_c, 6u * PERIOD_US, d);
+    TEST_ASSERT_UINT16_WITHIN(1u, 199u, d[1]);
+}
+
+/* MAP-09a: the last frames of the other sensors are used only if not older than
+ * VALID_DATA_MAX_AGE_MS (150 ms) relative to the trigger frame. */
+void test_MAP09a_staggered_uses_other_frames_within_max_age(void)
+{
+    init_staggered();
+    make_frame(TOF_SENSOR_C, 0u, 0u, 2000); /* obstacle in sectors 0..3 */
+    (void)tof_core_push_frame(&g_c, &g_fr, 0u);
+    TEST_ASSERT_EQUAL_INT(CELL_OCCUPIED, g_c.fusion.cell[0].state);
+
+    /* L at 150 ms: C (age 150) is still used -> sector 0 keeps getting OCC. */
+    make_frame(TOF_SENSOR_L, 0u, 150u * MS, 0);
+    (void)tof_core_push_frame(&g_c, &g_fr, 150u * MS);
+    TEST_ASSERT_EQUAL_UINT32(0u, g_c.fusion.cell_t_us[0]);
+    TEST_ASSERT_EQUAL_UINT32(0u, g_c.fusion.cell[0].t_valid_us);
+
+    /* L at 151 ms: C is too old -> not used, sector 0 gets no new contribution. */
+    make_frame(TOF_SENSOR_L, 1u, 151u * MS, 0);
+    (void)tof_core_push_frame(&g_c, &g_fr, 151u * MS);
+    TEST_ASSERT_EQUAL_UINT32(0u, g_c.fusion.cell_t_us[0]);
+    TEST_ASSERT_EQUAL_INT(EXPORT_STALE, fusion_export_state(&g_c.fusion, 0u, 151u * MS));
+    /* Sector 70 is seen by L (fresh) and C (too old): time of L. */
+    TEST_ASSERT_EQUAL_UINT32(151u * MS, g_c.fusion.cell_t_us[70]);
+}
+
+/* SNS-12a: default ORIENT_CONFIRMED = 0 -> event at start and map at most DEGRADED. */
+void test_SNS12a_core_orientation_not_confirmed(void)
+{
+    params_set_defaults(&g_p);
+    tof_core_init(&g_c, &g_p, 0u);
+    TEST_ASSERT_TRUE(g_c.orient_not_confirmed_event);
+    (void)run(&g_c, 0u, 5u, 0x7u, 0);
+    TEST_ASSERT_EQUAL_INT(SENSOR_OK, tof_core_sensor_health(&g_c, TOF_SENSOR_C));
+    TEST_ASSERT_EQUAL_INT(MAP_DEGRADED, tof_core_map_state(&g_c));
+
+    (void)params_set_u32(&g_p, PARAM_ORIENT_CONFIRMED, 1u);
+    tof_core_init(&g_c, &g_p, 0u);
+    TEST_ASSERT_FALSE(g_c.orient_not_confirmed_event);
+    (void)run(&g_c, 0u, 5u, 0x7u, 0);
+    TEST_ASSERT_EQUAL_INT(MAP_OK, tof_core_map_state(&g_c));
+}
+
+/* MAP-10a: median ambient above AMBIENT_DEGRADED for longer than DEGRADED_TIME_MS -> DEGRADED. */
+void test_MAP10a_core_high_ambient_degrades_sensor(void)
+{
+    (void)params_set_u32(&g_p, PARAM_AMBIENT_DEGRADED, 100u);
+    tof_core_init(&g_c, &g_p, 0u);
+    for (uint32_t k = 0; k < 8u; k++) {
+        const uint32_t t = k * PERIOD_US;
+        for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
+            make_frame(s, k, t, 0);
+            if (s == TOF_SENSOR_R) {
+                for (uint8_t z = 0; z < 16u; z++) {
+                    g_fr.zone[z].ambient_per_spad = 500u;
+                }
+            }
+            (void)tof_core_push_frame(&g_c, &g_fr, t);
+        }
+        (void)tof_core_update(&g_c, t);
+    }
+    /* 7 periods = 467 ms > 300 ms */
+    TEST_ASSERT_EQUAL_INT(SENSOR_DEGRADED, tof_core_sensor_health(&g_c, TOF_SENSOR_R));
+    TEST_ASSERT_EQUAL_INT(SENSOR_OK, tof_core_sensor_health(&g_c, TOF_SENSOR_L));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -190,5 +284,9 @@ int main(void)
     RUN_TEST(test_MAP11_core_all_sensors_silent_lost);
     RUN_TEST(test_MAP05_core_is_deterministic);
     RUN_TEST(test_MAP09_core_does_not_wait_for_reinit_sensor);
+    RUN_TEST(test_MAP09a_staggered_map_on_every_frame);
+    RUN_TEST(test_MAP09a_staggered_uses_other_frames_within_max_age);
+    RUN_TEST(test_SNS12a_core_orientation_not_confirmed);
+    RUN_TEST(test_MAP10a_core_high_ambient_degrades_sensor);
     return UNITY_END();
 }

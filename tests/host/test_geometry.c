@@ -423,8 +423,8 @@ void test_MAP02_mount_offset_xyz(void)
     geo_mount_init(&m, 90.0f, 0.0f, 0.0f, t, 4u, GEO_ORIENT_IDENTITY);
     const geo_vec3_t e90 = {0.10f, 1.05f, -0.02f};
     assert_vec(e90, geo_sensor_to_body(&m, p_s), TOL);
-    /* The height of a point does not depend on t_m (h_tof is at the sensor, DEV-04). */
-    TEST_ASSERT_FLOAT_WITHIN(TOL, 0.5f, geo_point_height(&m, p_s, 0.0f, 0.0f, 0.5f));
+    /* MAP-14a: heights refer to the body centre, so t_m enters: z_L(p_B) = -0.02. */
+    TEST_ASSERT_FLOAT_WITHIN(TOL, 0.52f, geo_point_height(&m, p_s, 0.0f, 0.0f, 0.5f));
 }
 
 /* ---- MAP-02: invertibility ---- */
@@ -578,6 +578,72 @@ void test_MAP02_heights_with_attitude_15(void)
     TEST_ASSERT_TRUE(checked >= 18u);
 }
 
+/* MAP-14a: body-centre height from the sensor optics height with MOUNT_XYZ_M. */
+void test_MAP14a_body_height_from_sensor(void)
+{
+    geo_mount_t m;
+    const geo_vec3_t t = {0.10f, 0.0f, 0.05f}; /* sensor 5 cm below the body centre */
+    geo_mount_init(&m, 0.0f, 0.0f, 0.0f, t, 4u, GEO_ORIENT_IDENTITY);
+    TEST_ASSERT_FLOAT_WITHIN(TOL, 0.25f, geo_body_height_from_sensor(&m, 0.20f, 0.0f, 0.0f));
+    /* Nose up 10 deg: the forward offset rises: z_L(t) = -0.1 sin10 + 0.05 cos10. */
+    const float th = geo_deg_to_rad(10.0f);
+    TEST_ASSERT_FLOAT_WITHIN(TOL, 0.20f - 0.10f * sind(10.0f) + 0.05f * cosd(10.0f),
+                             geo_body_height_from_sensor(&m, 0.20f, th, 0.0f));
+}
+
+/* MAP-14a: body-centre height from a downward rangefinder with RF_XYZ_M. */
+void test_MAP14a_body_height_from_rangefinder(void)
+{
+    const geo_vec3_t t_rf = {0.0f, 0.0f, 0.03f};
+    TEST_ASSERT_FLOAT_WITHIN(TOL, 1.03f, geo_body_height_from_rf(1.0f, t_rf, 0.0f, 0.0f));
+    const float th = geo_deg_to_rad(10.0f);
+    const float ph = geo_deg_to_rad(5.0f);
+    const float e = 1.0f * cosd(10.0f) * cosd(5.0f) + 0.03f * cosd(10.0f) * cosd(5.0f);
+    TEST_ASSERT_FLOAT_WITHIN(TOL, e, geo_body_height_from_rf(1.0f, t_rf, th, ph));
+}
+
+/* MAP-14a: with offsets and attitude, the ground hit of a ray has h_p = 0 when h_body comes from
+ * the optics height of the same sensor. */
+void test_MAP14a_ground_hit_with_offset_and_attitude(void)
+{
+    geo_mount_t m;
+    const geo_vec3_t t = {0.12f, -0.04f, 0.06f};
+    geo_mount_init(&m, -30.0f, 0.0f, 0.0f, t, 4u, GEO_ORIENT_IDENTITY);
+    const float th = geo_deg_to_rad(-5.0f);
+    const float ph = geo_deg_to_rad(3.0f);
+    const float h_opt = 0.2f;
+    const float h_body = geo_body_height_from_sensor(&m, h_opt, th, ph);
+    const geo_vec3_t u = geo_zone_point_sensor(&m, 3u, 1u, 1.0f);
+    const float down = geo_body_to_level(geo_mat_apply(m.r_bs, u), th, ph).z;
+    TEST_ASSERT_TRUE(down > 0.0f);
+    const geo_vec3_t p = geo_zone_point_sensor(&m, 3u, 1u, h_opt / down);
+    TEST_ASSERT_FLOAT_WITHIN(1e-4f, 0.0f, geo_point_height(&m, p, th, ph, h_body));
+}
+
+/* MAP-05a: the extent at range equals the direction extent when t_m = 0 and converges to it far away. */
+void test_MAP05a_extent_at_range(void)
+{
+    geo_mount_t m;
+    const geo_vec3_t t0 = {0.0f, 0.0f, 0.0f};
+    geo_mount_init(&m, 30.0f, 4.0f, -3.0f, t0, 4u, GEO_ORIENT_IDENTITY);
+    geo_zone_extent_t a;
+    geo_zone_extent_t b;
+    geo_zone_extent(&m, 2u, 1u, &a);
+    geo_zone_extent_at_range(&m, 2u, 1u, 0.5f, &b);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, a.az_min_deg, b.az_min_deg);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, a.az_max_deg, b.az_max_deg);
+
+    const geo_vec3_t ty = {0.0f, 0.10f, 0.0f};
+    geo_mount_init(&m, 0.0f, 0.0f, 0.0f, ty, 4u, GEO_ORIENT_IDENTITY);
+    geo_zone_extent(&m, 1u, 1u, &a);
+    geo_zone_extent_at_range(&m, 1u, 1u, 0.3f, &b);
+    /* Centre ray alpha -5.625: (0.2986, -0.0294 + 0.1) -> +13.4 deg from the body centre. */
+    TEST_ASSERT_FLOAT_WITHIN(0.15f, 13.4f, b.az_center_deg);
+    TEST_ASSERT_TRUE(b.az_min_deg > a.az_max_deg);
+    geo_zone_extent_at_range(&m, 1u, 1u, 1000.0f, &b);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, a.az_center_deg, b.az_center_deg);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -613,5 +679,9 @@ int main(void)
     RUN_TEST(test_MAP02_zyx_hand_values);
     RUN_TEST(test_MAP02_vehicle_pitch_and_roll_combined);
     RUN_TEST(test_MAP02_heights_with_attitude_15);
+    RUN_TEST(test_MAP14a_body_height_from_sensor);
+    RUN_TEST(test_MAP14a_body_height_from_rangefinder);
+    RUN_TEST(test_MAP14a_ground_hit_with_offset_and_attitude);
+    RUN_TEST(test_MAP05a_extent_at_range);
     return UNITY_END();
 }

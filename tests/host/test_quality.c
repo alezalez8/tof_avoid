@@ -125,8 +125,9 @@ void test_MAP03_zone_without_targets(void)
     TEST_ASSERT_EQUAL_UINT8(0u, q.n_targets);
     TEST_ASSERT_EQUAL_UINT8(0u, q.n_valid);
     TEST_ASSERT_EQUAL_HEX8(0u, q.valid_mask);
-    /* No detection is not an invalid measurement (DEV-03). */
-    TEST_ASSERT_TRUE(q.zone_valid);
+    /* MAP-10a: a zone without a target is neither valid nor invalid; it is not counted. */
+    TEST_ASSERT_FALSE(q.has_target);
+    TEST_ASSERT_FALSE(q.zone_valid);
 }
 
 void test_MAP03_zone_with_only_invalid_targets_is_invalid(void)
@@ -138,6 +139,7 @@ void test_MAP03_zone_with_only_invalid_targets_is_invalid(void)
     quality_zone_t q;
     quality_zone_eval(&g_cfg, &z, &q);
     TEST_ASSERT_EQUAL_UINT8(1u, q.n_targets);
+    TEST_ASSERT_TRUE(q.has_target);
     TEST_ASSERT_FALSE(q.zone_valid);
 }
 

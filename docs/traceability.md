@@ -7,7 +7,7 @@
 Для требований, у которых критерий ТЗ включает тесты HIL/стенда, статус остаётся **impl**, пока эти тесты не пройдены,
 даже если host-часть (T-00) проходит.
 
-Обновляется в том же коммите, что и код. Последнее обновление: 2026-10-23, этап E1a.
+Обновляется в том же коммите, что и код. Последнее обновление: 2026-10-23, этап E1a + уточнения ТЗ 5.6.
 
 ## SNS — сенсорная подсистема
 
@@ -25,6 +25,7 @@
 | SNS-10 | Таймаут SPI-транзакции ≤ 10 мс | — | Ревью + T-07 | todo |
 | SNS-11 | Отказ датчика → переинициализация только его; ≤ 1 с; FAILED с повтором 10 с | `core/src/sensor_health.c`: `sh_on_error`, `sh_update`, `sh_on_reinit_done`, `sh_take_reinit_request` (решение в ядре; переинициализацию выполняет драйвер — E4/E5) | T-00: `test_sensor_health` `test_SNS11_*` — pass; T-07 — E5 | impl |
 | SNS-12 | Ориентация матрицы (поворот/зеркало) на датчик — в конфигурации | `ORIENT_TRANSFORM_L/C/R` в `params_table.h`; `core/src/geometry.c`: `geo_orient_apply`, `geo_zone_from_raw` | T-00: `test_MAP02_orient_*` — pass; T-06 — E7 | impl |
+| SNS-12a | 5.6: ORIENT_CONFIRMED = 0 → карта не OK (максимум DEGRADED); STATUSTEXT «TOF ORIENT NOT CONFIRMED» при старте | `core/src/fusion.c`: `fusion_map_state_cfg`; `core/src/tof_core.c`: `orient_not_confirmed_event`; STATUSTEXT — E1b (events) | T-00: `test_SNS12a_*` — pass; STATUSTEXT — E1b; T-06 — E7 | impl |
 | SNS-13 | Калибровка Xtalk, хранение во Flash | — | T-08 | todo |
 
 ## MAP — обработка и карта
@@ -36,15 +37,21 @@
 | MAP-03 | Валидность цели: status ∈ VALID_STATUS, sigma, signal | `core/src/quality.c`: `quality_target_valid`, `quality_zone_eval` | T-00: `test_quality` `test_MAP03_*` — pass; T-10 — E7 | impl |
 | MAP-04 | Горизонтальная дистанция и азимут в корпусной СК; ROW_MASK | `core/src/geometry.c`: `geo_horiz_dist`, `geo_azimuth_deg`, `geo_zone_target`; `core/src/fusion.c`: `classify_zone` (d с учётом t_m), `fusion_init` (ROW_MASK) | T-00: `test_MAP04_*`, `test_MAP02_three_sensors_zone_azimuths` — pass | pass |
 | MAP-05 | Сетка 72 × 5°, зоны по протяжённости + CAL_TOL_DEG, без интерполяции | `core/src/fusion.c`: `fusion_init` (маски сектор→зоны), `step_sector` (правила перекрытия 5.3), `fusion_export` | T-00: `test_fusion` `test_MAP05_*` — pass | pass |
+| MAP-05a | 5.6: параллакс — точка с MOUNT_XYZ_M, протяжённость в азимутах от центра корпуса на измеренной дальности | `core/src/geometry.c`: `geo_zone_extent_at_range`; `core/src/fusion.c`: `mark_target`, `step_sector` | T-00: `test_MAP05a_*` (`test_geometry`, `test_fusion`) — pass | pass |
 | MAP-06 | GROUND_SUSPECT по MAP-14 и MAP-18 | — | — | todo |
 | MAP-07 | GROUND_POLICY только в FLIGHT; DROP запрещён до T-22, T-25, T-26 | — | Конфигурация + T-22 | todo |
+| MAP-07a | 5.6: DROP заблокирован флагом сборки TOF_ALLOW_GROUND_DROP (по умолчанию 0), без флага отвергается при загрузке | `core/include/core/config.h`, `params_table.h` (max GROUND_POLICY); экспорт DROP в FLIGHT — с MAP-17 в E1b | T-00: `test_MAP07a_drop_rejected_without_build_flag`, `test_params_drop` — pass | impl |
 | MAP-08 | Исключён, заменён MAP-13 | — | — | n/a |
 | MAP-09 | Объединение кадров в FUSION_WINDOW_MS; время ячейки по самому старому вкладу | `core/src/fusion.c`: `fusion_ready`, `fusion_run`, `step_sector` (`cell_t_us`), `fusion_export_state` (STALE) | T-00: `test_fusion` `test_MAP09_*` — pass | pass |
+| MAP-09a | 5.6: STAGGERED — слияние на каждом кадре с кадрами остальных ≤ VALID_DATA_MAX_AGE_MS, t1 = время кадра-триггера; SIMULTANEOUS — по окну | `core/src/fusion.c`: `fusion_run_staggered`, `fusion_run` (`t1_us`); `core/src/tof_core.c`: `tof_core_push_frame` | T-00: `test_MAP09a_*` (`test_tof_core`) — pass; T-11 — E6 | impl |
 | MAP-10 | Здоровье датчика OK / DEGRADED / FAILED; ячейки неисправного — INV | `core/src/sensor_health.c`: `sh_update` (health), `sh_on_frame`; `core/src/fusion.c`: `fusion_push_frame` (доля валидных зон), `fusion_run` (FAILED → INV) | T-00: `test_MAP10_*` в `test_sensor_health`, `test_fusion` — pass; T-07 — E5 | impl |
+| MAP-10a | 5.6: доля валидных зон только среди зон с целью; DEGRADED по медиане ambient > AMBIENT_DEGRADED (0 — выкл.) | `core/src/quality.c` (`has_target`), `core/src/fusion.c`: `fusion_push_frame`, `ambient_median`; `core/src/sensor_health.c`: `sh_on_frame` | T-00: `test_MAP10a_*` — pass; T-20 — E7 | impl |
 | MAP-11 | Состояние карты OK / DEGRADED / LOST | `core/src/fusion.c`: `fusion_map_state` | T-00: `test_MAP11_*` — pass | pass |
 | MAP-12 | Задержки t1…t5 по p99 | — | T-11 | todo |
 | MAP-13 | Автомат удержания и снятия препятствия (таблица 5.3) | `core/src/cell_fsm.c`: `cell_fsm_step` (`step_occ`, `step_clr`, `step_inv`), `cell_cfg_from_params` | T-00: `test_cell_fsm` `test_MAP13_*` — каждый переход таблицы 5.3 отдельным тестом — pass | pass |
+| MAP-13a | 5.6: CLR при выкл. CLEAR_MEASURED — только от валидной цели дальше max; nb = 0 — INV; при вкл. — ambient ≤ AMBIENT_CLEAR_MAX | `core/src/fusion.c`: `classify_zone` | T-00: `test_MAP13a_*` (`test_fusion`) — pass | pass |
 | MAP-14 | «Луч — земля» по протяжённости зоны, GROUND_TOL_M | — | Юнит-тест + T-22, T-25 | todo |
+| MAP-14a | 5.6: высоты от центра корпуса, h_p = h_body − z_L(p_B) с t_m; h_body по дальномеру с RF_XYZ_M, на земле — TOF_HEIGHT_GROUND_M с MOUNT_XYZ_M | `core/src/geometry.c`: `geo_point_height`, `geo_body_height_from_sensor`, `geo_body_height_from_rf` (расчёт); выбор источника по фазам и дальномер — E1b | T-00: `test_MAP14a_*` — pass (расчёт); источник h_body — E1b | impl |
 | MAP-15 | Источник h_tof по фазам | — | Юнит-тест + T-26 | todo |
 | MAP-16 | Автомат полётных фаз | — | Юнит-тест + T-26 | todo |
 | MAP-17 | Политика экспорта по фазам | — | T-25, T-26 | todo |
@@ -114,12 +121,13 @@
 | ID | Требование (кратко) | Файл / функция | Тест | Статус |
 | --- | --- | --- | --- | --- |
 | SW-01 | Сборка CubeCLT + CMake + Ninja без IDE | `CMakeLists.txt`, `CMakePresets.json`, `cmake/arm-none-eabi-cortex-m4f.cmake`, `tools/scripts/build_target_check.ps1` (пока только `target-check`) | Сборка из командной строки | todo |
-| SW-02 | core/: C11, без HAL, без malloc/рекурсии, только float; покрытие ≥ 90 % | `cmake/TofCompilerFlags.cmake` (`-Wdouble-promotion`, `-Wvla`), `cmake/check_target_lib.cmake` (нет double-хелперов), `tools/scripts/coverage.sh`; API ядра `core/src/tof_core.c` (время — аргументом) | Отчёт покрытия E1a: строки 99,2 %, ветви 96,6 % — pass | pass |
+| SW-02 | core/: C11, без HAL, без malloc/рекурсии, только float; покрытие ≥ 90 % | `cmake/TofCompilerFlags.cmake` (`-Wdouble-promotion`, `-Wvla`), `cmake/check_target_lib.cmake` (нет double-хелперов), `tools/scripts/coverage.sh`; API ядра `core/src/tof_core.c` (время — аргументом) | Отчёт покрытия E1a + 5.6: строки 99,3 %, ветви 96,0 % — pass | pass |
 | SW-03 | `bsp.h` — единственная точка доступа к железу | — (E2) | Ревью | todo |
 | SW-04 | ULD и MAVLink в third_party без изменений; platform-слой через bsp.h | `third_party/mavlink/c_library_v2` (submodule) | Diff с оригиналом | todo |
 | SW-05 | Кооперативный суперцикл, худшая итерация ≤ 5 мс | — | T-11 | todo |
 | SW-06 | Flash и RAM ≤ 80 % | — | Map-файл + T-11 | todo |
 | SW-07 | Таблица параметров, слоты A/B с CRC-32 | `core/include/core/params_table.h` (таблица), `core/src/params.c`: `params_set_*`, `params_validate`, `params_store_load`, `params_store_save`; `core/src/crc32.c` | T-00: `test_params` (`test_SW07_*`, в т. ч. обрыв питания на каждом байте записи) — pass; T-17, T-27 — E6 | impl |
+| SW-07a | 5.6: пределы min/max временные, таблица в docs/params.md на ревью | `tools/params_md/params_md.c`, `tools/scripts/params_md.sh`, `docs/params.md` | CTest `test_SW07a_params_md_up_to_date` — pass; ревью человеком — ожидается | impl |
 | SW-08 | Сборки DEBUG / FLIGHT; assert → лог и управляемый сброс | — | T-11 | todo |
 | SW-09 | `-Wall -Wextra -Werror`, cppcheck без warning | `cmake/TofCompilerFlags.cmake`, `tools/scripts/cppcheck.sh` | Скрипт CI: host и target-check без предупреждений, cppcheck 2.7 без замечаний (E1a) — pass | pass |
 | SW-10 | Semver + git-хеш в прошивке; CHANGELOG.md | `core/include/core/version.h`, `core/src/version.c`: `tof_version_string`, `tof_version_git_hash`, `tof_version_number`; `CHANGELOG.md` | T-00: `test_SW10_*` | todo |
@@ -145,7 +153,7 @@
 
 | ID | Уровень | Исполнитель | Этап | Проверяет | Отчёт | Статус |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-00 | Host | Агент | E0 запуск, E1 приёмка | Юнит-тесты ядра, покрытие ≥ 90 % | E1a: 8 наборов, 152 теста (params, geometry, quality, cell_fsm, sensor_health, fusion, tof_core, version) — pass, покрытие строк 99,2 %; осталось E1b (земля и фазы, MAVLink, отказы, события) | impl |
+| T-00 | Host | Агент | E0 запуск, E1 приёмка | Юнит-тесты ядра, покрытие ≥ 90 % | E1a + 5.6: 9 наборов, 171 тест + проверка `docs/params.md` — pass, покрытие строк 99,3 %; осталось E1b (земля и фазы, MAVLink, отказы, события) | impl |
 | T-01 | Стенд | Человек | E7 | HW-02, HW-05 | — | todo |
 | T-02 | HIL | Агент + человек | E5 | SNS-02, HW-03, HW-04 | — | todo |
 | T-03 | HIL | Агент | E5 | SNS-04, SNS-05 | — | todo |

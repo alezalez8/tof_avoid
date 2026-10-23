@@ -13,6 +13,6 @@ cppcheck \
     --template=gcc \
     --suppress=missingIncludeSystem \
     -I core/include \
-    core app drivers bsp tests/host
+    core app drivers bsp tests/host tools/params_md
 
 echo "cppcheck: no findings"

@@ -1,0 +1,72 @@
+# Параметры модуля
+
+Генерируется из `core/include/core/params_table.h` утилитой `tools/params_md` (`tools/scripts/params_md.sh`); вручную не править.
+Пределы min/max — временные, на ревью человеком (ТЗ 5.6, SW-07a). Версия формата слота: 2.
+Умолчания `LCD_ENABLE` и `LOG_LEVEL` — для сборки DEBUG; `GROUND_POLICY` max = 1 только при `TOF_ALLOW_GROUND_DROP = 1` (MAP-07a).
+
+| # | Имя | Тип | Умолчание | Min | Max |
+| --- | --- | --- | --- | --- | --- |
+| 0 | `SENSOR_RES` | u8 | 4 | 4 | 8 |
+| 1 | `SENSOR_FREQ_HZ` | u8 | 15 | 1 | 30 |
+| 2 | `SCHEDULE` | u8 | 0 | 0 | 1 |
+| 3 | `ORIENT_TRANSFORM_L` | u8 | 0 | 0 | 7 |
+| 4 | `ORIENT_TRANSFORM_C` | u8 | 0 | 0 | 7 |
+| 5 | `ORIENT_TRANSFORM_R` | u8 | 0 | 0 | 7 |
+| 6 | `ORIENT_CONFIRMED` | u8 | 0 | 0 | 1 |
+| 7 | `MOUNT_YAW_DEG_L` | f32 | -30 | -180 | 180 |
+| 8 | `MOUNT_YAW_DEG_C` | f32 | 0 | -180 | 180 |
+| 9 | `MOUNT_YAW_DEG_R` | f32 | 30 | -180 | 180 |
+| 10 | `MOUNT_PITCH_DEG_L` | f32 | 0 | -15 | 15 |
+| 11 | `MOUNT_PITCH_DEG_C` | f32 | 0 | -15 | 15 |
+| 12 | `MOUNT_PITCH_DEG_R` | f32 | 0 | -15 | 15 |
+| 13 | `MOUNT_ROLL_DEG_L` | f32 | 0 | -15 | 15 |
+| 14 | `MOUNT_ROLL_DEG_C` | f32 | 0 | -15 | 15 |
+| 15 | `MOUNT_ROLL_DEG_R` | f32 | 0 | -15 | 15 |
+| 16 | `MOUNT_X_M_L` | f32 | 0 | -1 | 1 |
+| 17 | `MOUNT_Y_M_L` | f32 | 0 | -1 | 1 |
+| 18 | `MOUNT_Z_M_L` | f32 | 0 | -1 | 1 |
+| 19 | `MOUNT_X_M_C` | f32 | 0 | -1 | 1 |
+| 20 | `MOUNT_Y_M_C` | f32 | 0 | -1 | 1 |
+| 21 | `MOUNT_Z_M_C` | f32 | 0 | -1 | 1 |
+| 22 | `MOUNT_X_M_R` | f32 | 0 | -1 | 1 |
+| 23 | `MOUNT_Y_M_R` | f32 | 0 | -1 | 1 |
+| 24 | `MOUNT_Z_M_R` | f32 | 0 | -1 | 1 |
+| 25 | `RF_X_M` | f32 | 0 | -1 | 1 |
+| 26 | `RF_Y_M` | f32 | 0 | -1 | 1 |
+| 27 | `RF_Z_M` | f32 | 0 | -1 | 1 |
+| 28 | `TOF_HEIGHT_GROUND_M` | f32 | 0.2 | 0.05 | 1 |
+| 29 | `VALID_STATUS` | u32 | 0x220 | 0x0 | 0xFFFFFFFF |
+| 30 | `SIGMA_MAX_MM` | u16 | 65535 | 1 | 65535 |
+| 31 | `SIGNAL_MIN` | u32 | 0 | 0 | 1000000 |
+| 32 | `AMBIENT_CLEAR_MAX` | u32 | 0 | 0 | 1000000 |
+| 33 | `AMBIENT_DEGRADED` | u32 | 0 | 0 | 1000000 |
+| 34 | `ROW_MASK` | u8 | 0xFF | 0x1 | 0xFF |
+| 35 | `CAL_TOL_DEG` | f32 | 2 | 0 | 10 |
+| 36 | `CLEAR_CONFIRM_FRAMES` | u8 | 3 | 1 | 50 |
+| 37 | `DIST_RELAX_FRAMES` | u8 | 2 | 1 | 50 |
+| 38 | `HOLD_MAX_MS` | u16 | 500 | 0 | 5000 |
+| 39 | `FUSION_WINDOW_MS` | u16 | 0 | 0 | 1000 |
+| 40 | `VALID_DATA_MAX_AGE_MS` | u16 | 150 | 10 | 2000 |
+| 41 | `VALID_FRAC_MIN` | f32 | 0.5 | 0 | 1 |
+| 42 | `DEGRADED_TIME_MS` | u16 | 300 | 0 | 10000 |
+| 43 | `GROUND_POLICY` | u8 | 0 | 0 | 0 |
+| 44 | `GROUND_TOL_M` | f32 | 0.15 | 0 | 1 |
+| 45 | `PHASE_H_FLIGHT_M` | f32 | 1.5 | 0.3 | 7 |
+| 46 | `PHASE_H_HYST_M` | f32 | 0.5 | 0 | 3 |
+| 47 | `MIN_DIST_CM` | u16 | 4 | 1 | 600 |
+| 48 | `MAX_DIST_CM` | u16 | 300 | 10 | 600 |
+| 49 | `MAV_DISTANCE_RATE_HZ` | u8 | 10 | 1 | 30 |
+| 50 | `UART_BAUD` | u32 | 115200 | 9600 | 921600 |
+| 51 | `MAV_SYSID` | u8 | 0 | 0 | 255 |
+| 52 | `MAV_COMPID` | u8 | 196 | 1 | 255 |
+| 53 | `FAULT_ACTION` | u8 | 1 | 0 | 2 |
+| 54 | `FAULT_TRIGGER_MASK` | u8 | 0xD | 0x0 | 0x3F |
+| 55 | `FAULT_ON_REBOOT` | u8 | 1 | 0 | 1 |
+| 56 | `FAULT_WALL` | u8 | 0 | 0 | 1 |
+| 57 | `WARN_CM` | u16 | 250 | 10 | 600 |
+| 58 | `CRIT_CM` | u16 | 120 | 10 | 600 |
+| 59 | `WARN_HYST_CM` | u16 | 30 | 0 | 200 |
+| 60 | `LCD_ENABLE` | u8 | 1 | 0 | 1 |
+| 61 | `LCD_RATE_HZ` | u8 | 5 | 1 | 20 |
+| 62 | `NAMED_VALUE_ENABLE` | u8 | 0 | 0 | 1 |
+| 63 | `LOG_LEVEL` | u8 | 1 | 0 | 1 |

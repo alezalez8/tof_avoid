@@ -23,3 +23,20 @@ tof_add_host_test(test_cell_fsm test_cell_fsm.c)
 tof_add_host_test(test_sensor_health test_sensor_health.c)
 tof_add_host_test(test_fusion test_fusion.c)
 tof_add_host_test(test_tof_core test_tof_core.c)
+
+# MAP-07a: params built with GROUND_POLICY = DROP allowed (a separate copy, not the tof_core library).
+add_executable(test_params_drop test_params_drop.c
+    "${PROJECT_SOURCE_DIR}/core/src/params.c"
+    "${PROJECT_SOURCE_DIR}/core/src/crc32.c")
+target_include_directories(test_params_drop PRIVATE "${PROJECT_SOURCE_DIR}/core/include")
+target_compile_definitions(test_params_drop PRIVATE TOF_ALLOW_GROUND_DROP=1u)
+target_link_libraries(test_params_drop PRIVATE unity)
+tof_apply_test_warnings(test_params_drop)
+add_test(NAME test_params_drop COMMAND test_params_drop)
+
+# SW-07a: docs/params.md is generated from the parameter table and must stay in sync.
+add_executable(params_md "${PROJECT_SOURCE_DIR}/tools/params_md/params_md.c")
+target_link_libraries(params_md PRIVATE tof_core)
+tof_apply_test_warnings(params_md)
+add_test(NAME test_SW07a_params_md_up_to_date
+    COMMAND params_md --check "${PROJECT_SOURCE_DIR}/docs/params.md")
