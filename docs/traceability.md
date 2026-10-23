@@ -38,9 +38,9 @@
 | MAP-04 | Горизонтальная дистанция и азимут в корпусной СК; ROW_MASK | `core/src/geometry.c`: `geo_horiz_dist`, `geo_azimuth_deg`, `geo_zone_target`; `core/src/fusion.c`: `classify_zone` (d с учётом t_m), `fusion_init` (ROW_MASK) | T-00: `test_MAP04_*`, `test_MAP02_three_sensors_zone_azimuths` — pass | pass |
 | MAP-05 | Сетка 72 × 5°, зоны по протяжённости + CAL_TOL_DEG, без интерполяции | `core/src/fusion.c`: `fusion_init` (маски сектор→зоны), `step_sector` (правила перекрытия 5.3), `fusion_export` | T-00: `test_fusion` `test_MAP05_*` — pass | pass |
 | MAP-05a | 5.6: параллакс — точка с MOUNT_XYZ_M, протяжённость в азимутах от центра корпуса на измеренной дальности | `core/src/geometry.c`: `geo_zone_extent_at_range`; `core/src/fusion.c`: `mark_target`, `step_sector` | T-00: `test_MAP05a_*` (`test_geometry`, `test_fusion`) — pass | pass |
-| MAP-06 | GROUND_SUSPECT по MAP-14 и MAP-18 | — | — | todo |
-| MAP-07 | GROUND_POLICY только в FLIGHT; DROP запрещён до T-22, T-25, T-26 | — | Конфигурация + T-22 | todo |
-| MAP-07a | 5.6: DROP заблокирован флагом сборки TOF_ALLOW_GROUND_DROP (по умолчанию 0), без флага отвергается при загрузке | `core/include/core/config.h`, `params_table.h` (max GROUND_POLICY); экспорт DROP в FLIGHT — с MAP-17 в E1b | T-00: `test_MAP07a_drop_rejected_without_build_flag`, `test_params_drop` — pass | impl |
+| MAP-06 | GROUND_SUSPECT по MAP-14 и MAP-18 | `core/src/ground.c`: `ground_target_compatible`; `core/src/fusion.c`: `classify_zone` (`fusion_zone_t.ground`, `n_ground_zones`), `cell_t.ground_suspect` | T-00: `test_ground` `test_MAP18_*`, `test_MAP14_*` — pass | impl |
+| MAP-07 | GROUND_POLICY только в FLIGHT; DROP запрещён до T-22, T-25, T-26 | `core/src/phase.c`: `phase_export_ground` (DROP только в FLIGHT и при валидной высоте) | T-00: `test_MAP17_export_policy_table`, `test_phase_drop` `test_MAP07_drop_only_in_flight_with_height` — pass; T-22 — E7 | impl |
+| MAP-07a | 5.6: DROP заблокирован флагом сборки TOF_ALLOW_GROUND_DROP (по умолчанию 0), без флага отвергается при загрузке | `core/include/core/config.h`, `params_table.h` (max GROUND_POLICY); `core/src/phase.c`: `phase_export_ground` (`#if TOF_ALLOW_GROUND_DROP`) | T-00: `test_MAP07a_drop_rejected_without_build_flag`, `test_params_drop`, `test_MAP07a_drop_inactive_without_build_flag`, `test_phase_drop` — pass | pass |
 | MAP-08 | Исключён, заменён MAP-13 | — | — | n/a |
 | MAP-09 | Объединение кадров в FUSION_WINDOW_MS; время ячейки по самому старому вкладу | `core/src/fusion.c`: `fusion_ready`, `fusion_run`, `step_sector` (`cell_t_us`), `fusion_export_state` (STALE) | T-00: `test_fusion` `test_MAP09_*` — pass | pass |
 | MAP-09a | 5.6: STAGGERED — слияние на каждом кадре с кадрами остальных ≤ VALID_DATA_MAX_AGE_MS, t1 = время кадра-триггера; SIMULTANEOUS — по окну | `core/src/fusion.c`: `fusion_run_staggered`, `fusion_run` (`t1_us`); `core/src/tof_core.c`: `tof_core_push_frame` | T-00: `test_MAP09a_*` (`test_tof_core`) — pass; T-11 — E6 | impl |
@@ -50,13 +50,13 @@
 | MAP-12 | Задержки t1…t5 по p99 | — | T-11 | todo |
 | MAP-13 | Автомат удержания и снятия препятствия (таблица 5.3) | `core/src/cell_fsm.c`: `cell_fsm_step` (`step_occ`, `step_clr`, `step_inv`), `cell_cfg_from_params` | T-00: `test_cell_fsm` `test_MAP13_*` — каждый переход таблицы 5.3 отдельным тестом — pass | pass |
 | MAP-13a | 5.6: CLR при выкл. CLEAR_MEASURED — только от валидной цели дальше max; nb = 0 — INV; при вкл. — ambient ≤ AMBIENT_CLEAR_MAX | `core/src/fusion.c`: `classify_zone` | T-00: `test_MAP13a_*` (`test_fusion`) — pass | pass |
-| MAP-14 | «Луч — земля» по протяжённости зоны, GROUND_TOL_M | — | Юнит-тест + T-22, T-25 | todo |
+| MAP-14 | «Луч — земля» по протяжённости зоны, GROUND_TOL_M | `core/src/ground.c`: `ground_min_height` (точный максимум z_L по протяжённости + CAL_TOL_DEG), `ground_target_compatible`; `core/src/fusion.c`: `classify_zone` | T-00: `test_ground` `test_MAP14_*` (сверка с перебором, 20 см на земле, протяжённость вместо центрального луча, тангаж ±15°, крен, нет ориентации) — pass; T-22, T-25 — E6/E7 | impl |
 | MAP-14a | 5.6: высоты от центра корпуса, h_p = h_body − z_L(p_B) с t_m; h_body по дальномеру с RF_XYZ_M, на земле — TOF_HEIGHT_GROUND_M с MOUNT_XYZ_M | `core/src/geometry.c`: `geo_point_height`, `geo_body_height_from_sensor`, `geo_body_height_from_rf` (расчёт); выбор источника по фазам и дальномер — E1b | T-00: `test_MAP14a_*` — pass (расчёт); источник h_body — E1b | impl |
-| MAP-15 | Источник h_tof по фазам | — | Юнит-тест + T-26 | todo |
-| MAP-16 | Автомат полётных фаз | — | Юнит-тест + T-26 | todo |
-| MAP-17 | Политика экспорта по фазам | — | T-25, T-26 | todo |
-| MAP-18 | Две цели в зоне классифицируются отдельно; земля — только если все цели совместимы | — | Юнит-тест + T-25 | todo |
-| MAP-19 | Классификация земли не подтверждена до T-25 и T-26 | — | T-25, T-26 | todo |
+| MAP-15 | Источник h_tof по фазам | `core/src/ground.c`: `ground_height_source`, `ground_body_height` | T-00: `test_MAP15_*` — pass; T-26 — E3 | impl |
+| MAP-16 | Автомат полётных фаз | `core/src/phase.c`: `phase_update` (`next_known`, `in_air` — подтверждение 1 с с гистерезисом), `phase_init`; сброс: `fusion_reset_cells` | T-00: `test_phase` `test_MAP16_*` — каждый переход — pass; T-26 — E3 | impl |
+| MAP-17 | Политика экспорта по фазам | `core/src/phase.c`: `phase_export_ground`, `phase_hold_allowed`; `core/src/fusion.c`: два вида карты `FUSION_VIEW_ALL` / `FUSION_VIEW_REAL`, `fusion_export_view` | T-00: `test_MAP17_*` (`test_phase` — каждая строка таблицы 5.4, `test_ground` — реальное препятствие за землёй) — pass; T-25, T-26 | impl |
+| MAP-18 | Две цели в зоне классифицируются отдельно; земля — только если все цели совместимы | `core/src/fusion.c`: `classify_zone` (каждая цель — `ground_target_compatible`; `zone.ground`, `cls_real`), `mark_target` | T-00: `test_MAP18_*` (зона земли, смешанная зона «земля + низкая цель») — pass; T-25 — E6/E7 | impl |
+| MAP-19 | Классификация земли не подтверждена до T-25 и T-26 | `core/include/core/ground.h` (статус в комментарии модуля); DROP заблокирован (MAP-07a) | T-00: `test_MAP19_low_object_near_ground_not_distinguished` (фиксирует ограничение модели); T-25, T-26 | impl |
 
 ## ICD — интерфейс MAVLink
 

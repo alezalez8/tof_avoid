@@ -6,6 +6,8 @@ add_library(tof_core STATIC
     src/quality.c
     src/cell_fsm.c
     src/sensor_health.c
+    src/ground.c
+    src/phase.c
     src/fusion.c
     src/tof_core.c)
 

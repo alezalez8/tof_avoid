@@ -23,12 +23,14 @@ static uint8_t sat_inc(uint8_t v)
     return (v < 0xFFu) ? (uint8_t)(v + 1u) : v;
 }
 
-static void take_obstacle(cell_t *c, uint16_t dist_cm, uint8_t sensor, uint8_t zone, bool angle_ok)
+static void take_obstacle(cell_t *c, uint16_t dist_cm, uint8_t sensor, uint8_t zone, bool angle_ok,
+                          bool ground)
 {
     c->dist_cm = dist_cm;
     c->src_sensor = sensor;
     c->src_zone = zone;
     c->angle_ok = angle_ok;
+    c->ground_suspect = ground;
     c->relax_count = 0u;
 }
 
@@ -47,7 +49,7 @@ static uint8_t step_occ(cell_t *c, const cell_cfg_t *cfg, const cell_input_t *in
             evt = CELL_EVT_OCCUPIED;
         }
         c->state = CELL_OCCUPIED;
-        take_obstacle(c, in->dist_cm, in->src_sensor, in->src_zone, in->angle_ok);
+        take_obstacle(c, in->dist_cm, in->src_sensor, in->src_zone, in->angle_ok, in->ground_suspect);
         return evt;
     }
     /* OCCUPIED + OCC farther: grow after DIST_RELAX_FRAMES confirmations in a row,
@@ -57,10 +59,12 @@ static uint8_t step_occ(cell_t *c, const cell_cfg_t *cfg, const cell_input_t *in
         c->relax_src_sensor = in->src_sensor;
         c->relax_src_zone = in->src_zone;
         c->relax_angle_ok = in->angle_ok;
+        c->relax_ground = in->ground_suspect;
     }
     c->relax_count = sat_inc(c->relax_count);
     if (c->relax_count >= cfg->dist_relax_frames) {
-        take_obstacle(c, c->relax_min_cm, c->relax_src_sensor, c->relax_src_zone, c->relax_angle_ok);
+        take_obstacle(c, c->relax_min_cm, c->relax_src_sensor, c->relax_src_zone, c->relax_angle_ok,
+                      c->relax_ground);
     }
     return evt;
 }

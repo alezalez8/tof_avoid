@@ -7,6 +7,7 @@
 #include "core/config.h"
 #include "core/frame.h"
 #include "core/fusion.h"
+#include "core/ground.h"
 #include "core/params.h"
 #include "core/sensor_health.h"
 
@@ -35,13 +36,16 @@ typedef struct {
     bool orient_not_confirmed_event; /* SNS-12a: ORIENT_CONFIRMED = 0 at start; cleared by the app */
     bool have_frame_no[TOF_NUM_SENSORS];
     uint32_t last_frame_no[TOF_NUM_SENSORS];
+    uint32_t t_push_us[TOF_NUM_SENSORS]; /* MAP-12 t2: frame handed to the core */
     tof_sensor_stats_t stats[TOF_NUM_SENSORS];
 } tof_core_t;
 
 /* p must pass params_validate(). Ranging is assumed to start at now_us. */
 void tof_core_init(tof_core_t *c, const params_t *p, uint32_t now_us);
 
-tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, uint32_t now_us);
+/* g: ground context at the frame time (MAP-14); NULL or not valid - no target is ground-compatible. */
+tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, const ground_ctx_t *g,
+                                      uint32_t now_us);
 
 /* The driver reports a failed transaction or read for this sensor. */
 void tof_core_sensor_error(tof_core_t *c, uint8_t sensor, uint32_t now_us);

@@ -24,8 +24,9 @@ void tof_core_init(tof_core_t *c, const params_t *p, uint32_t now_us)
     c->orient_not_confirmed_event = !c->fusion.orient_confirmed;
 }
 
-/* REQ: SNS-09, SNS-11, MAP-10 */
-tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, uint32_t now_us)
+/* REQ: SNS-09, SNS-11, MAP-10, MAP-12 (t2), MAP-14 */
+tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, const ground_ctx_t *g,
+                                      uint32_t now_us)
 {
     const uint8_t s = frame->sensor_id;
     if (s >= TOF_NUM_SENSORS) {
@@ -40,7 +41,7 @@ tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, u
         fusion_run(&c->fusion, h, now_us);
         c->map_pending = true;
     }
-    if (frame->freq_hz != c->freq_hz || !fusion_push_frame(&c->fusion, frame)) {
+    if (frame->freq_hz != c->freq_hz || !fusion_push_frame(&c->fusion, frame, g)) {
         c->stats[s].rejected++;
         sh_on_error(&c->sh[s], now_us);
         return TOF_PUSH_BAD_MODE;
@@ -51,6 +52,7 @@ tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, u
     c->have_frame_no[s] = true;
     c->last_frame_no[s] = frame->frame_no;
     c->stats[s].frames++;
+    c->t_push_us[s] = now_us;
     sh_on_frame(&c->sh[s], &c->sh_cfg, c->fusion.frame[s].valid_frac, c->fusion.frame[s].ambient_high,
                 now_us);
     if (c->fusion.staggered) {

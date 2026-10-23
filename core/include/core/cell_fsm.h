@@ -30,6 +30,7 @@ typedef struct {
     uint8_t src_sensor;  /* OCC only: sensor and raw zone of the nearest target */
     uint8_t src_zone;
     bool angle_ok;       /* OCC only: zone extent hits the sector without CAL_TOL_DEG (DEV-06) */
+    bool ground_suspect; /* OCC only: the nearest target is ground-compatible (MAP-14) */
 } cell_input_t;
 
 typedef struct {
@@ -46,13 +47,14 @@ typedef struct {
     uint8_t src_sensor;    /* source of the held distance */
     uint8_t src_zone;
     bool angle_ok;         /* angular reliability of the held distance */
-    bool ground_suspect;   /* GROUND_SUSPECT flag, set by ground classification (MAP-14, later) */
+    bool ground_suspect;   /* GROUND_SUSPECT flag of the held distance (MAP-14, MAP-18) */
     uint8_t clr_count;     /* consecutive CLR candidates */
     uint8_t relax_count;   /* consecutive farther OCC candidates */
     uint16_t relax_min_cm; /* nearest distance seen in the current relax run */
     uint8_t relax_src_sensor;
     uint8_t relax_src_zone;
     bool relax_angle_ok;
+    bool relax_ground;
 } cell_t;
 
 /* Events returned by cell_fsm_step (bit flags). */

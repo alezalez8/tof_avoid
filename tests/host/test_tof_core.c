@@ -45,7 +45,7 @@ static uint32_t run(tof_core_t *c, uint32_t t0, uint32_t n, uint8_t alive_mask, 
         for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
             if (((alive_mask >> s) & 1u) != 0u) {
                 make_frame(s, k, t, (s == TOF_SENSOR_C) ? c_obstacle_mm : 0);
-                TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(c, &g_fr, t));
+                TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(c, &g_fr, NULL, t));
             }
         }
         maps += tof_core_update(c, t) ? 1u : 0u;
@@ -59,7 +59,7 @@ static uint32_t run(tof_core_t *c, uint32_t t0, uint32_t n, uint8_t alive_mask, 
 void test_SNS09_frame_metadata_is_used(void)
 {
     make_frame(TOF_SENSOR_R, 41u, 5000u, 0);
-    TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(&g_c, &g_fr, 5100u));
+    TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(&g_c, &g_fr, NULL, 5100u));
     TEST_ASSERT_TRUE(g_c.fusion.frame[TOF_SENSOR_R].fresh);
     TEST_ASSERT_EQUAL_UINT32(5000u, g_c.fusion.frame[TOF_SENSOR_R].t_us);
     TEST_ASSERT_EQUAL_UINT32(41u, g_c.fusion.frame[TOF_SENSOR_R].frame_no);
@@ -67,16 +67,16 @@ void test_SNS09_frame_metadata_is_used(void)
     TEST_ASSERT_EQUAL_UINT32(1u, g_c.stats[TOF_SENSOR_R].frames);
     /* Frame number gaps are counted. */
     make_frame(TOF_SENSOR_R, 42u, 6000u, 0);
-    (void)tof_core_push_frame(&g_c, &g_fr, 6000u);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, 6000u);
     make_frame(TOF_SENSOR_R, 45u, 7000u, 0);
-    (void)tof_core_push_frame(&g_c, &g_fr, 7000u);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, 7000u);
     TEST_ASSERT_EQUAL_UINT32(1u, g_c.stats[TOF_SENSOR_R].gaps);
 }
 
 void test_SNS09_bad_sensor_id_ignored(void)
 {
     make_frame(7u, 1u, 0u, 0);
-    TEST_ASSERT_EQUAL_INT(TOF_PUSH_BAD_SENSOR, tof_core_push_frame(&g_c, &g_fr, 0u));
+    TEST_ASSERT_EQUAL_INT(TOF_PUSH_BAD_SENSOR, tof_core_push_frame(&g_c, &g_fr, NULL, 0u));
     tof_core_sensor_error(&g_c, 7u, 0u);
     TEST_ASSERT_FALSE(tof_core_take_reinit_request(&g_c, 7u));
     tof_core_reinit_done(&g_c, 7u, true, 0u);
@@ -90,7 +90,7 @@ void test_SNS09_wrong_mode_is_error(void)
         make_frame(TOF_SENSOR_L, k, k * MS, 0);
         g_fr.freq_hz = (k == 0u) ? 30u : 15u;
         g_fr.res = (k == 0u) ? 4u : 8u;
-        TEST_ASSERT_EQUAL_INT(TOF_PUSH_BAD_MODE, tof_core_push_frame(&g_c, &g_fr, k * MS));
+        TEST_ASSERT_EQUAL_INT(TOF_PUSH_BAD_MODE, tof_core_push_frame(&g_c, &g_fr, NULL, k * MS));
     }
     TEST_ASSERT_EQUAL_UINT32(3u, g_c.stats[TOF_SENSOR_L].rejected);
     TEST_ASSERT_TRUE(tof_core_take_reinit_request(&g_c, TOF_SENSOR_L));
@@ -175,9 +175,9 @@ void test_MAP09_core_does_not_wait_for_reinit_sensor(void)
     tof_core_sensor_error(&g_c, TOF_SENSOR_C, t);
     TEST_ASSERT_TRUE(tof_core_take_reinit_request(&g_c, TOF_SENSOR_C));
     make_frame(TOF_SENSOR_L, 2u, t, 0);
-    (void)tof_core_push_frame(&g_c, &g_fr, t);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, t);
     make_frame(TOF_SENSOR_R, 2u, t, 0);
-    (void)tof_core_push_frame(&g_c, &g_fr, t);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, t);
     TEST_ASSERT_TRUE(tof_core_update(&g_c, t));
 }
 
@@ -196,7 +196,7 @@ void test_MAP09a_staggered_map_on_every_frame(void)
         for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
             const uint32_t t = k * PERIOD_US + s * (PERIOD_US / 3u);
             make_frame(s, k, t, 2000);
-            TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(&g_c, &g_fr, t));
+            TEST_ASSERT_EQUAL_INT(TOF_PUSH_OK, tof_core_push_frame(&g_c, &g_fr, NULL, t));
             TEST_ASSERT_EQUAL_UINT32(t, g_c.fusion.t1_us);
             maps += tof_core_update(&g_c, t) ? 1u : 0u;
             TEST_ASSERT_FALSE(tof_core_update(&g_c, t + 1u)); /* no extra map without a frame */
@@ -215,18 +215,18 @@ void test_MAP09a_staggered_uses_other_frames_within_max_age(void)
 {
     init_staggered();
     make_frame(TOF_SENSOR_C, 0u, 0u, 2000); /* obstacle in sectors 0..3 */
-    (void)tof_core_push_frame(&g_c, &g_fr, 0u);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, 0u);
     TEST_ASSERT_EQUAL_INT(CELL_OCCUPIED, g_c.fusion.cell[0].state);
 
     /* L at 150 ms: C (age 150) is still used -> sector 0 keeps getting OCC. */
     make_frame(TOF_SENSOR_L, 0u, 150u * MS, 0);
-    (void)tof_core_push_frame(&g_c, &g_fr, 150u * MS);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, 150u * MS);
     TEST_ASSERT_EQUAL_UINT32(0u, g_c.fusion.cell_t_us[0]);
     TEST_ASSERT_EQUAL_UINT32(0u, g_c.fusion.cell[0].t_valid_us);
 
     /* L at 151 ms: C is too old -> not used, sector 0 gets no new contribution. */
     make_frame(TOF_SENSOR_L, 1u, 151u * MS, 0);
-    (void)tof_core_push_frame(&g_c, &g_fr, 151u * MS);
+    (void)tof_core_push_frame(&g_c, &g_fr, NULL, 151u * MS);
     TEST_ASSERT_EQUAL_UINT32(0u, g_c.fusion.cell_t_us[0]);
     TEST_ASSERT_EQUAL_INT(EXPORT_STALE, fusion_export_state(&g_c.fusion, 0u, 151u * MS));
     /* Sector 70 is seen by L (fresh) and C (too old): time of L. */
@@ -264,7 +264,7 @@ void test_MAP10a_core_high_ambient_degrades_sensor(void)
                     g_fr.zone[z].ambient_per_spad = 500u;
                 }
             }
-            (void)tof_core_push_frame(&g_c, &g_fr, t);
+            (void)tof_core_push_frame(&g_c, &g_fr, NULL, t);
         }
         (void)tof_core_update(&g_c, t);
     }

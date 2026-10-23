@@ -8,12 +8,21 @@
 #include "core/config.h"
 #include "core/frame.h"
 #include "core/geometry.h"
+#include "core/ground.h"
 #include "core/params.h"
 #include "core/quality.h"
 #include "core/sensor_health.h"
 
 /* Obstacle map: 72 x 5 deg grid (MAP-05, MAP-05a) built from the frames of three sensors
- * (MAP-09, MAP-09a), cell hold/release by MAP-13, map state (MAP-11, SNS-12a), export by 5.2. */
+ * (MAP-09, MAP-09a), cell hold/release by MAP-13, map state (MAP-11, SNS-12a), export by 5.2.
+ *
+ * Ground (MAP-14, MAP-18): every valid target in [min, max] is checked against the ground separately.
+ * The map is kept in two views, each with its own MAP-13 cells:
+ *   FUSION_VIEW_ALL  - every target is an obstacle (GROUND_SUSPECT kept, KEEP policy);
+ *   FUSION_VIEW_REAL - only targets incompatible with the ground; a zone whose targets are all
+ *                      ground-compatible is INV there (65535), so a real obstacle behind the ground
+ *                      in the same sector is still exported (MAP-17).
+ * Without a valid ground context both views are identical. */
 
 #define FUSION_DIST_UNKNOWN 65535u /* "no data" for ArduPilot, never "free" */
 
@@ -24,7 +33,9 @@ typedef enum {
 } zone_class_t;
 
 typedef struct {
-    uint8_t cls;      /* zone_class_t */
+    uint8_t cls;      /* zone_class_t, FUSION_VIEW_ALL */
+    uint8_t cls_real; /* zone_class_t, FUSION_VIEW_REAL */
+    bool ground;      /* GROUND_SUSPECT: valid targets in range, all ground-compatible (MAP-18) */
     uint16_t dist_cm; /* ZONE_OCC: horizontal distance of the nearest valid target in range */
 } fusion_zone_t;
 
@@ -32,6 +43,7 @@ typedef struct {
 typedef struct {
     bool hit;
     bool angle_ok; /* the target's extent hits the sector without CAL_TOL_DEG */
+    bool ground;   /* the nearest target is ground-compatible (MAP-14) */
     uint8_t zone;  /* raw zone index */
     uint16_t dist_cm;
 } fusion_sec_occ_t;
@@ -45,9 +57,17 @@ typedef struct {
     float valid_frac; /* MAP-10a: valid / zones with a target; 1 when no zone has a target */
     uint32_t ambient_median;
     bool ambient_high; /* median ambient > AMBIENT_DEGRADED (MAP-10a), never when the limit is 0 */
+    uint8_t n_ground_zones; /* GROUND_SUSPECT zones of the frame (DIA-01) */
     fusion_zone_t zone[TOF_MAX_ZONES];
-    fusion_sec_occ_t sec_occ[TOF_NUM_SECTORS];
+    fusion_sec_occ_t sec_occ[TOF_NUM_SECTORS];  /* FUSION_VIEW_ALL */
+    fusion_sec_occ_t sec_real[TOF_NUM_SECTORS]; /* FUSION_VIEW_REAL */
 } fusion_frame_t;
+
+typedef enum {
+    FUSION_VIEW_ALL = 0,
+    FUSION_VIEW_REAL,
+    FUSION_VIEW_COUNT
+} fusion_view_t;
 
 typedef enum {
     MAP_OK = 0,
@@ -89,21 +109,25 @@ typedef struct {
 
     /* State. */
     fusion_frame_t frame[TOF_NUM_SENSORS];
-    cell_t cell[TOF_NUM_SECTORS];
+    cell_t cell[TOF_NUM_SECTORS];      /* FUSION_VIEW_ALL */
+    cell_t cell_real[TOF_NUM_SECTORS]; /* FUSION_VIEW_REAL */
     uint32_t cell_t_us[TOF_NUM_SECTORS]; /* data time: oldest contribution of the last step */
     bool cell_has_time[TOF_NUM_SECTORS];
     map_state_t state;
     uint32_t map_seq;            /* fused maps produced */
     uint32_t t_map_us;           /* time of the last fused map */
     uint32_t t1_us;              /* MAP-12 t1 of the last map (MAP-09a) */
-    uint32_t hold_expired_total; /* MAP-13 log events */
+    uint8_t t1_sensor;           /* sensor whose frame gave t1 */
+    uint32_t hold_expired_total; /* MAP-13 log events, FUSION_VIEW_ALL */
+    bool hold_expired[FUSION_VIEW_COUNT][TOF_NUM_SECTORS]; /* MAP-13: expired in the last step */
     uint32_t frames_late_total;  /* frames dropped as older than the fusion window */
 } fusion_t;
 
 void fusion_init(fusion_t *f, const params_t *p);
 
-/* Classifies and stores a frame. False if its sensor id or resolution does not match. */
-bool fusion_push_frame(fusion_t *f, const tof_frame_t *frame);
+/* Classifies and stores a frame; g is the ground context at the frame time (NULL or not valid:
+ * no target is ground-compatible). False if its sensor id or resolution does not match. */
+bool fusion_push_frame(fusion_t *f, const tof_frame_t *frame, const ground_ctx_t *g);
 
 /* SIMULTANEOUS: true when every non-FAILED sensor has a fresh frame, or the oldest fresh frame has
  * waited for the fusion window. */
@@ -124,8 +148,14 @@ map_state_t fusion_map_state(const sensor_health_t health[TOF_NUM_SENSORS]);
 map_state_t fusion_map_state_cfg(const fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS]);
 
 export_state_t fusion_export_state(const fusion_t *f, uint8_t sector, uint32_t now_us);
+export_state_t fusion_export_state_view(const fusion_t *f, fusion_view_t view, uint8_t sector, uint32_t now_us);
 
 /* distances[72] in cm by 5.2: OCCUPIED -> distance, CLEAR_MEASURED -> max + 1, else 65535. */
 void fusion_export(const fusion_t *f, uint32_t now_us, uint16_t distances[TOF_NUM_SECTORS]);
+void fusion_export_view(const fusion_t *f, fusion_view_t view, uint32_t now_us,
+                        uint16_t distances[TOF_NUM_SECTORS]);
+
+/* GROUND_RECOVER (5.4): every cell of both views back to UNKNOWN, holds dropped. */
+void fusion_reset_cells(fusion_t *f);
 
 #endif /* CORE_FUSION_H */

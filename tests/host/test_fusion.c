@@ -48,7 +48,7 @@ static void zone_target(uint8_t s, uint8_t i, uint8_t j, int16_t mm, uint8_t sta
 
 static void push(uint8_t s)
 {
-    TEST_ASSERT_TRUE(fusion_push_frame(&g_f, &g_fr[s]));
+    TEST_ASSERT_TRUE(fusion_push_frame(&g_f, &g_fr[s], NULL));
 }
 
 /* Every zone of every sensor reports a valid target beyond max_distance (3.5 m). */
@@ -123,10 +123,10 @@ void test_MAP05_push_rejects_wrong_resolution_or_sensor(void)
 {
     frame_empty(TOF_SENSOR_C, T0);
     g_fr[TOF_SENSOR_C].res = 8u;
-    TEST_ASSERT_FALSE(fusion_push_frame(&g_f, &g_fr[TOF_SENSOR_C]));
+    TEST_ASSERT_FALSE(fusion_push_frame(&g_f, &g_fr[TOF_SENSOR_C], NULL));
     frame_empty(TOF_SENSOR_C, T0);
     g_fr[TOF_SENSOR_C].sensor_id = 3u;
-    TEST_ASSERT_FALSE(fusion_push_frame(&g_f, &g_fr[TOF_SENSOR_C]));
+    TEST_ASSERT_FALSE(fusion_push_frame(&g_f, &g_fr[TOF_SENSOR_C], NULL));
 }
 
 /* ---- MAP-05: extent + CAL_TOL, no interpolation ---- */

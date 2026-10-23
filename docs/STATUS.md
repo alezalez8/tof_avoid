@@ -20,7 +20,6 @@ MAP-05a, MAP-10a, MAP-14a, MAP-07a, SNS-12a, SW-07a — в `docs/traceability.md
 
 - Ревью временных пределов параметров в `docs/params.md` (SW-07a).
 - ORIENT_TRANSFORM по UM3109 и `ORIENT_CONFIRMED = 1` после T-06.
-- Подтверждение дополнения DEV-01 (модули `crc32`, `sensor_health`, `tof_core`, `frame.h`, `config.h`).
 
 ## Следующий шаг
 
