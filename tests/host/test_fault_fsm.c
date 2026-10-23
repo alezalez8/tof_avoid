@@ -378,6 +378,22 @@ void test_FLT10_virtual_wall(void)
     TEST_ASSERT_EQUAL_UINT16(4u, d[6]); /* +30 deg */
 }
 
+/* FLT-03: a command that could not be queued is not counted and goes out on the next pass. */
+void test_FLT03_unqueued_command_retried(void)
+{
+    upd(F_FAILED, 0u);
+    TEST_ASSERT_TRUE(g_out.send);
+    fault_send_failed(&g_f);
+    upd(F_FAILED, 5u);
+    TEST_ASSERT_TRUE(g_out.send);
+    TEST_ASSERT_EQUAL_UINT8(0u, g_out.confirmation);
+    TEST_ASSERT_TRUE((g_out.events & FAULT_EVT_HOLD_SENT) != 0u);
+    TEST_ASSERT_EQUAL_UINT8(1u, g_f.sends);
+    fault_init(&g_f);
+    fault_send_failed(&g_f); /* nothing sent: no effect */
+    TEST_ASSERT_EQUAL_UINT8(0u, g_f.sends);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -397,5 +413,6 @@ int main(void)
     RUN_TEST(test_FLT08_conditions);
     RUN_TEST(test_FLT04_ground_recover_resets_episode);
     RUN_TEST(test_FLT10_virtual_wall);
+    RUN_TEST(test_FLT03_unqueued_command_retried);
     return UNITY_END();
 }

@@ -83,6 +83,10 @@ void fault_reset_episode(fault_fsm_t *f);
 void fault_update(fault_fsm_t *f, const fault_cfg_t *cfg, uint8_t active, const fault_fc_t *fc, uint32_t now_us,
                   fault_out_t *out);
 
+/* The command of the last fault_update could not be queued: it does not count as a transmission and
+ * is retried on the next pass. */
+void fault_send_failed(fault_fsm_t *f);
+
 /* AUTO, GUIDED or RTL. */
 bool fault_is_auto_mode(uint32_t custom_mode);
 

@@ -66,6 +66,10 @@ static void on_attitude(mavrx_t *r, const mavlink_message_t *m, uint32_t now_us)
 {
     mavlink_attitude_t a;
     mavlink_msg_attitude_decode(m, &a);
+    if (r->att_count > 0u &&
+        (uint32_t)(now_us - r->att[(r->att_head + MAVRX_ATT_LEN - 1u) % MAVRX_ATT_LEN].t_us) < MAVRX_ATT_MIN_STEP_US) {
+        return; /* faster than 100 Hz: decimated so the ring keeps >= 300 ms */
+    }
     mavrx_att_t *s = &r->att[r->att_head];
     s->t_us = now_us;
     s->roll_rad = a.roll;
@@ -151,12 +155,20 @@ static void dispatch(mavrx_t *r, const mavlink_message_t *m, uint32_t now_us)
     case MAVLINK_MSG_ID_DISTANCE_SENSOR:
         on_distance_sensor(r, m, now_us);
         break;
-    case MAVLINK_MSG_ID_COMMAND_ACK:
+    case MAVLINK_MSG_ID_COMMAND_ACK: {
+        mavlink_command_ack_t a;
+        mavlink_msg_command_ack_decode(m, &a);
+        if ((a.target_system != 0u && a.target_system != r->fc_sysid) ||
+            (a.target_component != 0u && a.target_component != r->own_compid)) {
+            r->stats.foreign++; /* an ACK for the GCS or another component */
+            break;
+        }
         r->ack_evt = true;
-        r->ack_command = mavlink_msg_command_ack_get_command(m);
-        r->ack_result = mavlink_msg_command_ack_get_result(m);
+        r->ack_command = a.command;
+        r->ack_result = a.result;
         r->t_ack_us = now_us;
         break;
+    }
     default:
         break; /* not used */
     }

@@ -24,8 +24,9 @@ static bool is_air(phase_t ph)
     return ph == PHASE_TAKEOFF || ph == PHASE_FLIGHT || ph == PHASE_LANDING;
 }
 
-/* IN_AIR below FLIGHT: TAKEOFF until h_tof >= PHASE_H_FLIGHT_M has held for 1 s. The confirmation
- * restarts only when h_tof falls below PHASE_H_FLIGHT_M - PHASE_H_HYST_M (hysteresis). */
+/* IN_AIR below FLIGHT: TAKEOFF until h_tof >= PHASE_H_FLIGHT_M has held for 1 s (table 5.4); any
+ * sample below the threshold restarts the confirmation. PHASE_H_HYST_M is the mission takeoff margin of
+ * 5.4, not a band of this automaton (DEV-12). */
 /* REQ: MAP-16 */
 static phase_t in_air(phase_fsm_t *f, const phase_cfg_t *cfg, float h_m, bool was_flight, uint32_t now_us)
 {
@@ -37,10 +38,8 @@ static phase_t in_air(phase_fsm_t *f, const phase_cfg_t *cfg, float h_m, bool wa
             f->h_timer_on = true;
             f->t_h_since_us = now_us;
         }
-    } else if (h_m < cfg->h_flight_m - cfg->h_hyst_m) {
-        f->h_timer_on = false;
     } else {
-        /* inside the hysteresis band: the running confirmation continues */
+        f->h_timer_on = false;
     }
     if (f->h_timer_on && (uint32_t)(now_us - f->t_h_since_us) >= PHASE_FLIGHT_CONFIRM_US) {
         return PHASE_FLIGHT;

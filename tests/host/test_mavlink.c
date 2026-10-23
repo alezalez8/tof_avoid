@@ -518,6 +518,32 @@ void test_ICD03_bad_crc_counted(void)
     TEST_ASSERT_EQUAL_UINT32(5u, g_rx.custom_mode);
 }
 
+/* Section 6: ATTITUDE faster than 100 Hz is decimated, the ring still covers >= 300 ms. */
+void test_MAP14_attitude_ring_covers_300ms_at_any_rate(void)
+{
+    float p = 0.0f;
+    float r = 0.0f;
+    feed_hb(false, 0u, 0u);
+    for (uint32_t k = 0; k <= 400u; k++) { /* 400 Hz for 1 s */
+        feed_att(0.001f * (float)k, 0.0f, 1000u * MS + k * 2500u);
+    }
+    const uint32_t now = 2000u * MS;
+    TEST_ASSERT_TRUE(mavrx_att_at(&g_rx, now - 300u * MS, now, &p, &r));
+    TEST_ASSERT_FLOAT_WITHIN(0.002f, 0.28f, p);
+}
+
+/* FLT-03: COMMAND_ACK addressed to another system or component is not taken. */
+void test_FLT03_command_ack_for_others_ignored(void)
+{
+    uint8_t b[MAVTX_BUF_LEN];
+    mavlink_message_t m;
+    feed_hb(true, 3u, 0u);
+    (void)mavlink_msg_command_ack_pack_status(FC_SYS, 1u, &g_fc_status, &m, MAV_CMD_DO_SET_MODE, MAV_RESULT_ACCEPTED,
+                                              0u, 0, 255u, 190u);
+    mavrx_feed(&g_rx, b, mavlink_msg_to_send_buffer(b, &m), 5u * MS);
+    TEST_ASSERT_FALSE(g_rx.ack_evt);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -542,5 +568,7 @@ int main(void)
     RUN_TEST(test_ICD03_fuzz_garbage_between_packets);
     RUN_TEST(test_ICD03_fuzz_truncation_and_corruption);
     RUN_TEST(test_ICD03_bad_crc_counted);
+    RUN_TEST(test_MAP14_attitude_ring_covers_300ms_at_any_rate);
+    RUN_TEST(test_FLT03_command_ack_for_others_ignored);
     return UNITY_END();
 }

@@ -118,26 +118,15 @@ void test_MAP16_takeoff_to_flight_after_1s(void)
     TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
 }
 
-/* MAP-16: hysteresis - a dip inside [H - HYST, H) does not restart the 1 s confirmation, a dip below
- * H - HYST does. */
-void test_MAP16_hysteresis_of_flight_confirmation(void)
+/* MAP-16: "h_tof >= PHASE_H_FLIGHT_M during 1 s" - any dip below the threshold restarts the
+ * confirmation (no band, DEV-12). */
+void test_MAP16_flight_confirmation_restarts_on_dip(void)
 {
     g_in.armed = true;
     (void)step(10u);
     fly(1.6f);
     (void)step(10u);
-    g_in.h_m = 1.2f; /* inside the band: continues */
-    (void)step(500u);
-    g_in.h_m = 1.6f;
-    (void)step(500u);
-    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
-
-    setUp();
-    g_in.armed = true;
-    (void)step(10u);
-    fly(1.6f);
-    (void)step(10u);
-    g_in.h_m = 0.9f; /* below the band: restart */
+    g_in.h_m = 1.49f; /* just below: restart */
     (void)step(500u);
     g_in.h_m = 1.6f;
     (void)step(500u);
@@ -339,7 +328,7 @@ int main(void)
     RUN_TEST(test_MAP16_takeoff_on_ls_takeoff);
     RUN_TEST(test_MAP16_takeoff_on_in_air_low);
     RUN_TEST(test_MAP16_takeoff_to_flight_after_1s);
-    RUN_TEST(test_MAP16_hysteresis_of_flight_confirmation);
+    RUN_TEST(test_MAP16_flight_confirmation_restarts_on_dip);
     RUN_TEST(test_MAP16_flight_sticky_while_in_air);
     RUN_TEST(test_MAP16_landing_and_ground_recover);
     RUN_TEST(test_MAP16_disarm_after_flight_recovers);

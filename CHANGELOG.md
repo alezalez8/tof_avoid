@@ -3,6 +3,38 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/) (SW-10).
 Версия прошивки задаётся в `core/include/core/version.h`.
 
+## [Unreleased] — E1 «Ядро», часть b
+
+### Добавлено
+
+- `ground` (MAP-14, MAP-14a, MAP-15, MAP-18, MAP-19): точный минимум высоты точки по угловой протяжённости зоны + CAL_TOL_DEG
+  (не по центральному лучу), классификация каждой цели отдельно, источник высоты корпуса по фазе; статус модели — «не подтверждена
+  до T-25/T-26».
+- `fusion`: два вида карты — все цели (KEEP) и только реальные препятствия (земля → 65535), у каждого свой автомат MAP-13;
+  реальное препятствие за землёй в том же секторе передаётся; число зон GROUND_SUSPECT на кадр; сброс ячеек.
+- `phase` (MAP-16, MAP-17, MAP-07, MAP-07a): автомат фаз по armed, landed_state и высоте (подтверждение 1 с с гистерезисом,
+  GROUND_RECOVER, PHASE_UNKNOWN), политика экспорта и разрешение команды удержания по таблице 5.4; DROP — только в FLIGHT,
+  только при флаге сборки `TOF_ALLOW_GROUND_DROP` и валидной высоте.
+- `mavlink_tx` / `mavlink_rx` (ICD-01, ICD-03, ICD-04): кодеры исходящих сообщений раздела 6 (из команд — только
+  SET_MESSAGE_INTERVAL и DO_SET_MODE в BRAKE/LOITER), парсер со своими буферами, кольцевой буфер ATTITUDE с интерполяцией
+  на момент кадра, дальномер orientation 25, таймауты, ответы UNSUPPORTED на команды компоненту 196; fuzz-тесты.
+- `fault_fsm` (FLT-03…FLT-06, FLT-08, FLT-10): команда удержания на шаге обнаружения, 5 передач через 500 мс, успех только по
+  режиму в HEARTBEAT, один успешный перевод на эпизод, возврат AUTO пилотом — только предупреждение, «TOF HOLD REJECTED»,
+  рестарт в полёте, «виртуальная стена» (FAULT_WALL = 0 по умолчанию).
+- `events` (DIA-03, DIA-04): STATUSTEXT по смене состояния с гистерезисом, дедупликацией и лимитами 1/с на тип и 3/с всего;
+  в наземных фазах — только реальные препятствия; «TOF ORIENT NOT CONFIRMED» (SNS-12a), «TOF PARAMS DEFAULT» (SW-07),
+  «TOF READY» с версией; журнал событий (истечение удержания MAP-13, COMMAND_ACK, фазы, отказы).
+- `scheduler` (MAP-12, ICD-02, FLT-01, FLT-02): конвейер кадр → карта → OBSTACLE_DISTANCE за один проход суперцикла,
+  запись карты для лога с отметками t1…t5, классы отказов FLT-01, остановка передачи при LOST и HEARTBEAT CRITICAL,
+  SET_MESSAGE_INTERVAL при старте и раз в 5 с, NAMED_VALUE_INT по параметру, очередь TX без блокировки.
+- Host-тесты: `test_ground`, `test_phase`, `test_phase_drop`, `test_mavlink`, `test_fault_fsm`, `test_events`,
+  `test_scheduler` (имитатор FC и трёх датчиков).
+
+### Изменено
+
+- `fusion_push_frame` и `tof_core_push_frame` принимают контекст земли кадра (`ground_ctx_t`, `NULL` — без классификации).
+- `core/` линкуется с заголовками `third_party/mavlink/c_library_v2` (без изменений).
+
 ## [Unreleased] — E1 «Ядро», часть a
 
 ### Добавлено

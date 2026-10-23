@@ -19,8 +19,10 @@
 #define MAVRX_RF_TIMEOUT_US 500000u   /* > 500 ms: height invalid */
 #define MAVRX_RF_ORIENTATION 25u      /* MAV_SENSOR_ROTATION_PITCH_270 (down) */
 
-/* ATTITUDE ring: 32 samples cover >= 300 ms up to 100 Hz (50 Hz requested: 640 ms). */
+/* ATTITUDE ring: samples closer than 10 ms to the stored one are skipped, so 32 samples always cover
+ * >= 310 ms whatever the stream rate (50 Hz requested: 640 ms). */
 #define MAVRX_ATT_LEN 32u
+#define MAVRX_ATT_MIN_STEP_US 10000u
 #define MAVRX_NACK_LEN 4u
 
 typedef struct {

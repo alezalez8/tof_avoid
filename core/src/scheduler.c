@@ -268,12 +268,18 @@ static void update_faults(sched_t *s, uint32_t now_us)
     s->rx.first_hb_evt = false;
     fault_out_t out;
     fault_update(&s->fault, &s->fault_cfg, s->faults, &fc, now_us, &out);
-    if (out.send && can_send(s)) {
+    bool queued = false;
+    if (out.send) {
         uint8_t buf[MAVTX_BUF_LEN];
-        (void)enqueue(s, buf, mavtx_hold_mode(&s->tx, buf, s->rx.fc_sysid, out.mode, out.confirmation), now_us);
-        ev_log(&s->ev, now_us, EV_LOG_HOLD_COMMAND, out.confirmation, (uint16_t)out.mode);
+        queued = can_send(s) &&
+                 enqueue(s, buf, mavtx_hold_mode(&s->tx, buf, s->rx.fc_sysid, out.mode, out.confirmation), now_us);
+        if (queued) {
+            ev_log(&s->ev, now_us, EV_LOG_HOLD_COMMAND, out.confirmation, (uint16_t)out.mode);
+        } else {
+            fault_send_failed(&s->fault); /* FLT-03: retried on the next pass, not counted */
+        }
     }
-    if ((out.events & FAULT_EVT_HOLD_SENT) != 0u) {
+    if ((out.events & FAULT_EVT_HOLD_SENT) != 0u && queued) {
         ev_raise(&s->ev, EV_ONE_HOLD_SENT, out.mode);
     }
     if ((out.events & FAULT_EVT_HOLD_REJECTED) != 0u) {

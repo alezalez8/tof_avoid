@@ -27,6 +27,16 @@ void fault_reset_episode(fault_fsm_t *f)
     f->sends = 0u;
 }
 
+/* REQ: FLT-03 */
+void fault_send_failed(fault_fsm_t *f)
+{
+    if (f->sends > 0u) {
+        f->sends--;
+        f->sends_total--;
+        f->t_last_send_us -= FAULT_RETRY_US; /* due again at once */
+    }
+}
+
 /* REQ: FLT-03, FLT-05 */
 bool fault_is_auto_mode(uint32_t custom_mode)
 {
@@ -37,6 +47,9 @@ bool fault_is_auto_mode(uint32_t custom_mode)
 static void send(fault_fsm_t *f, uint32_t now_us, fault_out_t *out)
 {
     out->send = true;
+    if (f->sends == 0u) {
+        out->events |= FAULT_EVT_HOLD_SENT; /* first transmission of the series */
+    }
     out->mode = f->target_mode;
     out->confirmation = f->sends;
     f->sends++;
@@ -59,7 +72,6 @@ static void run_series(fault_fsm_t *f, const fault_cfg_t *cfg, const fault_fc_t 
             f->hb_at_first_send = fc->hb_count;
             f->target_mode = (cfg->action == PARAM_FAULT_LOITER) ? TOF_COPTER_MODE_LOITER : TOF_COPTER_MODE_BRAKE;
             send(f, now_us, out); /* on the update that detected the fault: <= 100 ms */
-            out->events |= FAULT_EVT_HOLD_SENT;
         } else if (f->reboot_latch) {
             f->reboot_latch = false; /* FLT-08 applies only to the first HEARTBEAT */
         } else {
