@@ -74,14 +74,14 @@
 | --- | --- | --- | --- | --- |
 | FLT-01 | Обнаруживаемые отказы, обнаружение ≤ 300 мс | — | T-07, T-14 | todo |
 | FLT-02 | При LOST — прекращение OBSTACLE_DISTANCE, HEARTBEAT CRITICAL | — | T-14 | todo |
-| FLT-03 | Команда удержания DO_SET_MODE ≤ 100 мс, повтор 500 мс × 5; успех только по HEARTBEAT | — | T-15 | todo |
-| FLT-04 | Эпизод отказа, не более одного успешного перевода, повторный AUTO пилотом | — | T-15 | todo |
-| FLT-05 | Запреты на команды (disarmed, наземные фазы, ручные режимы, иные команды) | — | Юнит-тест + T-16 | todo |
-| FLT-06 | «TOF HOLD REJECTED» при неисполнении перевода | — | T-15 | todo |
+| FLT-03 | Команда удержания DO_SET_MODE ≤ 100 мс, повтор 500 мс × 5; успех только по HEARTBEAT | `core/src/fault_fsm.c`: `fault_update`, `run_series` (команда на том же шаге, что и обнаружение; 5 передач через 500 мс; успех — режим в HEARTBEAT после команды); `core/src/mavlink_tx.c`: `mavtx_hold_mode` | T-00: `test_fault_fsm` `test_FLT03_*` — pass; T-15 — E3 | impl |
+| FLT-04 | Эпизод отказа, не более одного успешного перевода, повторный AUTO пилотом | `core/src/fault_fsm.c`: `fault_update` (эпизод до исчезновения отказа), `run_series` (SUCCEEDED / REJECTED / ABORTED — больше без команд, `FAULT_EVT_PILOT_RESUMED`), `fault_reset_episode` (GROUND_RECOVER) | T-00: `test_FLT04_*` — pass; T-15 — E3 | impl |
+| FLT-05 | Запреты на команды (disarmed, наземные фазы, ручные режимы, иные команды) | `core/src/fault_fsm.c`: `run_series` (`allowed`), `fault_is_auto_mode`; `core/src/phase.c`: `phase_hold_allowed`; `core/src/mavlink_tx.c`: из команд строятся только SET_MESSAGE_INTERVAL и DO_SET_MODE в BRAKE/LOITER | T-00: `test_FLT05_*` — pass; T-16 — E3 | impl |
+| FLT-06 | «TOF HOLD REJECTED» при неисполнении перевода | `core/src/fault_fsm.c`: `run_series` (`FAULT_EVT_HOLD_REJECTED` через 500 мс после 5-й передачи); текст — `events` | T-00: `test_FLT03_retry_500ms_x5_then_rejected` — pass; T-15 — E3 | impl |
 | FLT-07 | IWDG ≤ 500 мс, BOR, причина сброса | — | T-17 | todo |
-| FLT-08 | Рестарт в полёте → удержание и «TOF REBOOTED IN FLIGHT» | — | T-17 | todo |
+| FLT-08 | Рестарт в полёте → удержание и «TOF REBOOTED IN FLIGHT» | `core/src/mavlink_rx.c`: `first_hb_evt`; `core/src/fault_fsm.c`: `fault_update` (`reboot_latch`, `FAULT_ON_REBOOT`) | T-00: `test_FLT08_*` — pass; T-17 — E6 | impl |
 | FLT-09 | Рестарт до первой валидной карты ≤ 3 с | — | T-17 | todo |
-| FLT-10 | «Виртуальная стена» FAULT_WALL (по умолчанию 0) | — | T-18 | todo |
+| FLT-10 | «Виртуальная стена» FAULT_WALL (по умолчанию 0) | `core/src/fault_fsm.c`: `fault_wall_apply` (сектора FAILED-датчика → min_distance); `params_table.h`: `FAULT_WALL` = 0 | T-00: `test_FLT10_virtual_wall` — pass; T-18 — E3 | impl |
 | FLT-11 | Сбой подсистемы не останавливает остальные | — | T-07, T-11 | todo |
 
 ## FC — параметры ArduPilot

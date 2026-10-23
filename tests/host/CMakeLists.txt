@@ -26,6 +26,7 @@ tof_add_host_test(test_tof_core test_tof_core.c)
 tof_add_host_test(test_ground test_ground.c)
 tof_add_host_test(test_phase test_phase.c)
 tof_add_host_test(test_mavlink test_mavlink.c)
+tof_add_host_test(test_fault_fsm test_fault_fsm.c)
 
 # MAP-07a: params built with GROUND_POLICY = DROP allowed (a separate copy, not the tof_core library).
 add_executable(test_params_drop test_params_drop.c

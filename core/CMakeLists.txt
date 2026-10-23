@@ -10,6 +10,7 @@ add_library(tof_core STATIC
     src/phase.c
     src/mavlink_rx.c
     src/mavlink_tx.c
+    src/fault_fsm.c
     src/fusion.c
     src/tof_core.c)
 
