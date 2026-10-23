@@ -108,9 +108,9 @@
 | --- | --- | --- | --- | --- |
 | DIA-01 | LCD 4 строки: фаза, режим, связь, тревога; L/C/R | — | T-09 | todo |
 | DIA-02 | LCD LCD_RATE_HZ порциями ≤ 2 мс, неблокирующий, отключаемый | — | T-11 | todo |
-| DIA-03 | События STATUSTEXT (префикс «TOF», ≤ 50 символов) | — | T-19 | todo |
-| DIA-04 | Правила STATUSTEXT: смена состояния, гистерезис, лимиты частоты | — | Юнит-тест + T-19, T-25 | todo |
-| DIA-05 | Пороги WARN_CM / CRIT_CM — параметры | — | Конфигурация | todo |
+| DIA-03 | События STATUSTEXT (префикс «TOF», ≤ 50 символов) | `core/src/events.c`: `channel_text`, `oneshot_text` (WARN/CRIT/CLEAR, датчик L/C/R LOST/OK, DATA STALE, MAP LOST, HOLD SENT/REJECTED, REBOOTED IN FLIGHT, FC LINK LOST, PHASE UNKNOWN, PARAMS DEFAULT, READY с версией, ORIENT NOT CONFIRMED) | T-00: `test_events` `test_DIA03_*` — pass; T-19 — E3 | impl |
+| DIA-04 | Правила STATUSTEXT: смена состояния, гистерезис, лимиты частоты | `core/src/events.c`: `ev_obstacle` (WARN_HYST_CM; в наземных фазах — только реальные препятствия), `ev_next_statustext` (смена состояния, дедупликация, ≤ 1/с на тип, ≤ 3/с всего, приоритет CRITICAL) | T-00: `test_DIA04_*` — pass; T-19, T-25 | impl |
+| DIA-05 | Пороги WARN_CM / CRIT_CM — параметры | `params_table.h`: `WARN_CM` 250, `CRIT_CM` 120, `WARN_HYST_CM` 30; `core/src/events.c`: `ev_cfg_from_params` | T-00: `test_DIA05_thresholds` — pass | pass |
 | DIA-06 | Отладочный лог через UART/USB CDC с DMA | — | T-10, T-11 | todo |
 | DIA-07 | Утилита декодирования лога и метрик на Python | `tools/logdecode/` (пусто) | Логи T-10, T-11 | todo |
 | DIA-08 | Счётчики в лог раз в 1 с | — | T-11 | todo |
