@@ -62,10 +62,10 @@
 
 | ID | Требование (кратко) | Файл / функция | Тест | Статус |
 | --- | --- | --- | --- | --- |
-| ICD-01 | Кодирование полей по таблицам раздела 6 | `third_party/mavlink/c_library_v2` (ardupilotmega) подключена | Юнит-тест кодера + T-12 | todo |
+| ICD-01 | Кодирование полей по таблицам раздела 6 | `core/src/mavlink_tx.c`: `mavtx_obstacle_distance`, `mavtx_heartbeat`, `mavtx_statustext`, `mavtx_set_message_interval`, `mavtx_hold_mode`, `mavtx_named_value_int`, `mavtx_command_ack`; `core/src/mavlink_rx.c`: `dispatch` (HEARTBEAT FC, EXTENDED_SYS_STATE, ATTITUDE, DISTANCE_SENSOR 25, COMMAND_ACK) | T-00: `test_mavlink` `test_ICD01_*` (каждое поле OBSTACLE_DISTANCE, MAVLink 2 без флагов несовместимости) — pass; T-12 — E3 | impl |
 | ICD-02 | Один OBSTACLE_DISTANCE на кадр карты | — | T-12 | todo |
-| ICD-03 | Парсер устойчив к мусору, счётчик ошибок CRC | — | Юнит-тест (fuzz) | todo |
-| ICD-04 | Команды от GCS не исполняются; COMMAND_LONG на compid 196 → UNSUPPORTED | — | Юнит-тест | todo |
+| ICD-03 | Парсер устойчив к мусору, счётчик ошибок CRC | `core/src/mavlink_rx.c`: `mavrx_feed` (`mavlink_frame_char_buffer` со своими буферами, `stats.crc_errors`, `stats.parse_errors`) | T-00: `test_ICD03_*` (fuzz: мусор, мусор между пакетами с разрезанием, обрывы и битые биты, одиночная ошибка CRC) — pass | pass |
+| ICD-04 | Команды от GCS не исполняются; COMMAND_LONG на compid 196 → UNSUPPORTED | `core/src/mavlink_rx.c`: `refuse`, `mavrx_take_nack` (COMMAND_LONG и COMMAND_INT); `core/src/mavlink_tx.c`: `mavtx_command_ack` | T-00: `test_ICD04_commands_refused` — pass; ответ в линию — scheduler | impl |
 | ICD-05 | UART через DMA без блокировки цикла | — | T-11 | todo |
 
 ## FLT — отказоустойчивость
