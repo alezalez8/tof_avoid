@@ -38,6 +38,7 @@ static void request_reinit(sh_t *s, uint32_t now_us)
 }
 
 /* One reinit attempt failed: retry at once, or FAILED after SH_REINIT_FAILS_TO_FAILED in a row. */
+/* REQ: SNS-11 */
 static void reinit_failed(sh_t *s, uint32_t now_us)
 {
     s->reinit_unconfirmed = false;
@@ -53,6 +54,7 @@ static void reinit_failed(sh_t *s, uint32_t now_us)
 }
 
 /* Error or missing frames while running. */
+/* REQ: SNS-11 */
 static void trigger(sh_t *s, uint32_t now_us)
 {
     mark_no_data(s);

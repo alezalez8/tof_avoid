@@ -496,6 +496,88 @@ void test_MAP02_zone_from_raw_out_of_range_code_is_identity(void)
     TEST_ASSERT_EQUAL_UINT8(5u, j);
 }
 
+/* Mount pitch / roll at +-15 deg against hand values. */
+void test_MAP02_mount_pitch_roll_15(void)
+{
+    const geo_vec3_t fwd = {1.0f, 0.0f, 0.0f};
+    const geo_vec3_t ey = {0.0f, 1.0f, 0.0f};
+    const geo_mount_t up = mount(0.0f, 15.0f, 0.0f, 4u);
+    const geo_vec3_t e_up = {0.965926f, 0.0f, -0.258819f};
+    assert_vec(e_up, geo_sensor_to_body(&up, fwd), TOL);
+    const geo_mount_t dn = mount(0.0f, -15.0f, 0.0f, 4u);
+    const geo_vec3_t e_dn = {0.965926f, 0.0f, 0.258819f};
+    assert_vec(e_dn, geo_sensor_to_body(&dn, fwd), TOL);
+    const geo_mount_t rp = mount(0.0f, 0.0f, 15.0f, 4u);
+    const geo_vec3_t e_rp = {0.0f, 0.965926f, 0.258819f};
+    assert_vec(e_rp, geo_sensor_to_body(&rp, ey), TOL);
+    const geo_mount_t rn = mount(0.0f, 0.0f, -15.0f, 4u);
+    const geo_vec3_t e_rn = {0.0f, 0.965926f, -0.258819f};
+    assert_vec(e_rn, geo_sensor_to_body(&rn, ey), TOL);
+}
+
+/* ZYX against independent hand values. */
+void test_MAP02_zyx_hand_values(void)
+{
+    const geo_vec3_t ey = {0.0f, 1.0f, 0.0f};
+    const geo_vec3_t ex = {1.0f, 0.0f, 0.0f};
+    /* Roll 90 first: y_S -> down; yaw 90 keeps it down. */
+    const geo_mount_t a = mount(90.0f, 0.0f, 90.0f, 4u);
+    const geo_vec3_t down = {0.0f, 0.0f, 1.0f};
+    assert_vec(down, geo_sensor_to_body(&a, ey), TOL);
+    /* Pitch 90 first: x_S -> up; yaw 90 keeps it up. In XYZ order it would point right. */
+    const geo_mount_t b = mount(90.0f, 90.0f, 0.0f, 4u);
+    const geo_vec3_t up = {0.0f, 0.0f, -1.0f};
+    assert_vec(up, geo_sensor_to_body(&b, ex), TOL);
+    /* [cos30 cos20, sin30 cos20, -sin20] */
+    const geo_mount_t c = mount(30.0f, 20.0f, 0.0f, 4u);
+    const geo_vec3_t e = {0.813798f, 0.469846f, -0.342020f};
+    assert_vec(e, geo_sensor_to_body(&c, ex), TOL);
+}
+
+/* Vehicle pitch and roll together: p_L = Ry(theta) Rx(phi) p_B, hand value. */
+void test_MAP02_vehicle_pitch_and_roll_combined(void)
+{
+    const geo_vec3_t p = {1.0f, 1.0f, 0.0f};
+    /* Rx(15) p = [1, c, s]; Ry(15): x' = c + s * s, z' = -s + c * s */
+    const float c = 0.965926f;
+    const float s = 0.258819f;
+    const geo_vec3_t e = {c + s * s, c, -s + c * s};
+    assert_vec(e, geo_body_to_level(p, geo_deg_to_rad(15.0f), geo_deg_to_rad(15.0f)), TOL);
+    const geo_vec3_t e2 = {c + s * s, c, s - c * s};
+    assert_vec(e2, geo_body_to_level(p, geo_deg_to_rad(-15.0f), geo_deg_to_rad(-15.0f)), TOL);
+}
+
+/* Heights 0.2 / 1 / 7 m with vehicle pitch and roll -15 / 0 / +15 deg in every combination. */
+void test_MAP02_heights_with_attitude_15(void)
+{
+    const float heights[3] = {0.2f, 1.0f, 7.0f};
+    const float att[3] = {-15.0f, 0.0f, 15.0f};
+    const geo_mount_t m = mount(30.0f, 0.0f, 0.0f, 4u);
+    unsigned checked = 0u;
+    for (unsigned k = 0; k < 3u; k++) {
+        for (unsigned a = 0; a < 3u; a++) {
+            for (unsigned b = 0; b < 3u; b++) {
+                const float th = geo_deg_to_rad(att[a]);
+                const float ph = geo_deg_to_rad(att[b]);
+                const geo_vec3_t u = geo_zone_point_sensor(&m, 3u, 1u, 1.0f);
+                const float down = geo_body_to_level(geo_mat_apply(m.r_bs, u), th, ph).z;
+                if (down <= 0.01f) {
+                    continue; /* ray does not reach the ground */
+                }
+                const float r = heights[k] / down;
+                const float tol = 1e-4f * heights[k] + 1e-5f;
+                const geo_vec3_t p = geo_zone_point_sensor(&m, 3u, 1u, r);
+                TEST_ASSERT_FLOAT_WITHIN(tol, 0.0f, geo_point_height(&m, p, th, ph, heights[k]));
+                const geo_vec3_t p2 = geo_zone_point_sensor(&m, 3u, 1u, 0.5f * r);
+                TEST_ASSERT_FLOAT_WITHIN(tol, 0.5f * heights[k],
+                                         geo_point_height(&m, p2, th, ph, heights[k]));
+                checked++;
+            }
+        }
+    }
+    TEST_ASSERT_TRUE(checked >= 18u);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -527,5 +609,9 @@ int main(void)
     RUN_TEST(test_MAP02_rotation_is_orthonormal_and_invertible);
     RUN_TEST(test_MAP02_orient_transform_round_trip_all_codes);
     RUN_TEST(test_MAP02_zone_from_raw_out_of_range_code_is_identity);
+    RUN_TEST(test_MAP02_mount_pitch_roll_15);
+    RUN_TEST(test_MAP02_zyx_hand_values);
+    RUN_TEST(test_MAP02_vehicle_pitch_and_roll_combined);
+    RUN_TEST(test_MAP02_heights_with_attitude_15);
     return UNITY_END();
 }

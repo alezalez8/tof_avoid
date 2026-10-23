@@ -114,7 +114,7 @@
 | ID | Требование (кратко) | Файл / функция | Тест | Статус |
 | --- | --- | --- | --- | --- |
 | SW-01 | Сборка CubeCLT + CMake + Ninja без IDE | `CMakeLists.txt`, `CMakePresets.json`, `cmake/arm-none-eabi-cortex-m4f.cmake`, `tools/scripts/build_target_check.ps1` (пока только `target-check`) | Сборка из командной строки | todo |
-| SW-02 | core/: C11, без HAL, без malloc/рекурсии, только float; покрытие ≥ 90 % | `cmake/TofCompilerFlags.cmake` (`-Wdouble-promotion`, `-Wvla`), `cmake/check_target_lib.cmake` (нет double-хелперов), `tools/scripts/coverage.sh`; API ядра `core/src/tof_core.c` (время — аргументом) | Отчёт покрытия E1a: строки 99,1 %, ветви 96,4 % — pass | pass |
+| SW-02 | core/: C11, без HAL, без malloc/рекурсии, только float; покрытие ≥ 90 % | `cmake/TofCompilerFlags.cmake` (`-Wdouble-promotion`, `-Wvla`), `cmake/check_target_lib.cmake` (нет double-хелперов), `tools/scripts/coverage.sh`; API ядра `core/src/tof_core.c` (время — аргументом) | Отчёт покрытия E1a: строки 99,2 %, ветви 96,6 % — pass | pass |
 | SW-03 | `bsp.h` — единственная точка доступа к железу | — (E2) | Ревью | todo |
 | SW-04 | ULD и MAVLink в third_party без изменений; platform-слой через bsp.h | `third_party/mavlink/c_library_v2` (submodule) | Diff с оригиналом | todo |
 | SW-05 | Кооперативный суперцикл, худшая итерация ≤ 5 мс | — | T-11 | todo |
@@ -145,7 +145,7 @@
 
 | ID | Уровень | Исполнитель | Этап | Проверяет | Отчёт | Статус |
 | --- | --- | --- | --- | --- | --- | --- |
-| T-00 | Host | Агент | E0 запуск, E1 приёмка | Юнит-тесты ядра, покрытие ≥ 90 % | — | todo |
+| T-00 | Host | Агент | E0 запуск, E1 приёмка | Юнит-тесты ядра, покрытие ≥ 90 % | E1a: 8 наборов, 152 теста (params, geometry, quality, cell_fsm, sensor_health, fusion, tof_core, version) — pass, покрытие строк 99,2 %; осталось E1b (земля и фазы, MAVLink, отказы, события) | impl |
 | T-01 | Стенд | Человек | E7 | HW-02, HW-05 | — | todo |
 | T-02 | HIL | Агент + человек | E5 | SNS-02, HW-03, HW-04 | — | todo |
 | T-03 | HIL | Агент | E5 | SNS-04, SNS-05 | — | todo |

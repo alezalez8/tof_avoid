@@ -136,6 +136,10 @@ params_status_t params_validate(const params_t *p)
     if (res == 8u && freq > 15u) {
         return PARAMS_ERR_INVALID;
     }
+    /* MAP-04: at least one row of the active matrix must stay in the map. */
+    if ((p->v[PARAM_ROW_MASK].u & ((1u << res) - 1u)) == 0u) {
+        return PARAMS_ERR_INVALID;
+    }
     if (p->v[PARAM_MIN_DIST_CM].u >= p->v[PARAM_MAX_DIST_CM].u) {
         return PARAMS_ERR_INVALID;
     }
@@ -184,12 +188,14 @@ static uint32_t schema_crc(void)
     return crc32_final(c);
 }
 
+/* REQ: SW-07 */
 static uint32_t image_crc(const uint8_t *img)
 {
     const uint32_t c = crc32_update(CRC32_INIT, img, HDR_CRC);
     return crc32_final(crc32_update(c, &img[PARAMS_HEADER_SIZE], PAYLOAD_SIZE));
 }
 
+/* REQ: SW-07 */
 static void serialize(const params_t *p, uint32_t seq, uint8_t *img)
 {
     put_u32(&img[HDR_MAGIC], PARAMS_MAGIC);
@@ -205,6 +211,7 @@ static void serialize(const params_t *p, uint32_t seq, uint8_t *img)
 }
 
 /* Reads and checks one slot. On success fills out and seq. */
+/* REQ: SW-07 */
 static bool load_slot(const params_flash_t *flash, uint8_t slot, params_t *out, uint32_t *seq)
 {
     uint8_t img[PARAMS_IMAGE_SIZE];
@@ -276,8 +283,24 @@ params_status_t params_store_save(params_store_t *st, const params_t *p, bool fc
     if (flash->slot_size < PARAMS_IMAGE_SIZE) {
         return PARAMS_ERR_SIZE;
     }
-    const uint8_t target = (st->active_slot == PARAMS_SLOT_A) ? PARAMS_SLOT_B : PARAMS_SLOT_A;
-    const uint32_t seq = st->active_seq + 1u;
+    /* Re-scan both slots: a read error at boot must not let an older slot with a higher sequence
+     * win over this save on the next boot (T-27). */
+    params_t tmp;
+    uint32_t seq_a = 0u;
+    uint32_t seq_b = 0u;
+    const bool ok_a = load_slot(flash, PARAMS_SLOT_A, &tmp, &seq_a);
+    const bool ok_b = load_slot(flash, PARAMS_SLOT_B, &tmp, &seq_b);
+    uint8_t newest = st->active_slot;
+    uint32_t base = st->active_seq;
+    if (ok_a && (!ok_b || seq_a >= seq_b)) {
+        newest = PARAMS_SLOT_A;
+        base = (seq_a > base) ? seq_a : base;
+    } else if (ok_b) {
+        newest = PARAMS_SLOT_B;
+        base = (seq_b > base) ? seq_b : base;
+    }
+    const uint8_t target = (newest == PARAMS_SLOT_A) ? PARAMS_SLOT_B : PARAMS_SLOT_A;
+    const uint32_t seq = base + 1u;
 
     uint8_t img[PARAMS_IMAGE_SIZE];
     serialize(p, seq, img);

@@ -32,11 +32,15 @@ static void take_obstacle(cell_t *c, uint16_t dist_cm, uint8_t sensor, uint8_t z
     c->relax_count = 0u;
 }
 
+/* REQ: MAP-13 */
 static uint8_t step_occ(cell_t *c, const cell_cfg_t *cfg, const cell_input_t *in, uint32_t now_us)
 {
     uint8_t evt = CELL_EVT_NONE;
     c->clr_count = 0u;
-    c->t_valid_us = now_us;
+    /* An older frame of another sensor must not move the hold timer backwards. */
+    if (c->state != CELL_OCCUPIED || (int32_t)(now_us - c->t_valid_us) > 0) {
+        c->t_valid_us = now_us;
+    }
     if (c->state != CELL_OCCUPIED || in->dist_cm <= c->dist_cm) {
         /* Any state + OCC closer than the held distance -> OCCUPIED at once. */
         if (c->state != CELL_OCCUPIED) {
@@ -61,6 +65,7 @@ static uint8_t step_occ(cell_t *c, const cell_cfg_t *cfg, const cell_input_t *in
     return evt;
 }
 
+/* REQ: MAP-13 */
 static uint8_t step_clr(cell_t *c, const cell_cfg_t *cfg)
 {
     c->relax_count = 0u;
@@ -79,6 +84,7 @@ static uint8_t step_clr(cell_t *c, const cell_cfg_t *cfg)
     return CELL_EVT_NONE;
 }
 
+/* REQ: MAP-13 */
 static uint8_t step_inv(cell_t *c, const cell_cfg_t *cfg, uint32_t now_us)
 {
     c->relax_count = 0u;

@@ -320,6 +320,15 @@ void test_MAP13_obstacle_after_release_any_distance(void)
     TEST_ASSERT_EQUAL_UINT16(290u, g_c.dist_cm);
 }
 
+/* A closer OCC from an older frame (another sensor) does not move the hold timer backwards. */
+void test_MAP13_older_closer_occ_keeps_hold_timer(void)
+{
+    (void)occ(200u, 100u * MS);
+    (void)occ(150u, 60u * MS);
+    TEST_ASSERT_EQUAL_UINT16(150u, g_c.dist_cm);
+    TEST_ASSERT_EQUAL_UINT32(100u * MS, g_c.t_valid_us);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -349,5 +358,6 @@ int main(void)
     RUN_TEST(test_MAP13_unknown_clr_run_broken_by_inv);
     RUN_TEST(test_MAP13_clear_clr_stays_clear);
     RUN_TEST(test_MAP13_obstacle_after_release_any_distance);
+    RUN_TEST(test_MAP13_older_closer_occ_keeps_hold_timer);
     return UNITY_END();
 }

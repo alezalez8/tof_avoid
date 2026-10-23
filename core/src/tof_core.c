@@ -87,7 +87,12 @@ bool tof_core_update(tof_core_t *c, uint32_t now_us)
     c->fusion.state = fusion_map_state(h);
     bool produced = c->map_pending;
     c->map_pending = false;
-    if (fusion_ready(&c->fusion, h, now_us)) {
+    /* A sensor in reinit or FAILED is not waited for (MAP-12 latency); its zones stay INV. */
+    sensor_health_t h_wait[TOF_NUM_SENSORS];
+    for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
+        h_wait[s] = (c->sh[s].sup == SH_RUNNING) ? h[s] : SENSOR_FAILED;
+    }
+    if (fusion_ready(&c->fusion, h_wait, now_us)) {
         fusion_run(&c->fusion, h, now_us);
         produced = true;
     }

@@ -419,6 +419,33 @@ void test_SW07_power_cut_during_first_save_gives_defaults_or_new(void)
     }
 }
 
+void test_SW07_validate_row_mask_keeps_an_active_row(void)
+{
+    (void)params_set_u32(&g_p, PARAM_ROW_MASK, 0xF0u); /* rows 4..7 only: none at 4x4 */
+    TEST_ASSERT_EQUAL_INT(PARAMS_ERR_INVALID, params_validate(&g_p));
+    (void)params_set_u32(&g_p, PARAM_SENSOR_RES, 8u);
+    TEST_ASSERT_EQUAL_INT(PARAMS_OK, params_validate(&g_p));
+}
+
+/* Both slots unreadable at boot (transient): the next save must still beat the older valid slot. */
+void test_SW07_save_after_boot_read_error_beats_existing_slot(void)
+{
+    params_t p;
+    (void)params_store_load(&g_store, &g_flash.api, &p);
+    (void)params_store_save(&g_store, &g_p, false); /* A, seq 1 */
+    (void)params_store_save(&g_store, &g_p, false); /* B, seq 2 */
+    g_flash.powered = false;
+    params_store_t st;
+    TEST_ASSERT_EQUAL_INT(PARAMS_LOADED_DEFAULTS, params_store_load(&st, &g_flash.api, &p));
+    mock_flash_power_on(&g_flash);
+    (void)params_set_u32(&g_p, PARAM_HOLD_MAX_MS, 444u);
+    TEST_ASSERT_EQUAL_INT(PARAMS_OK, params_store_save(&st, &g_p, false));
+    TEST_ASSERT_EQUAL_UINT8(PARAMS_SLOT_A, st.active_slot);
+    TEST_ASSERT_EQUAL_UINT32(3u, st.active_seq);
+    TEST_ASSERT_EQUAL_INT(PARAMS_LOADED_SLOT_A, params_store_load(&st, &g_flash.api, &p));
+    TEST_ASSERT_EQUAL_UINT32(444u, params_get_u32(&p, PARAM_HOLD_MAX_MS));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -447,5 +474,7 @@ int main(void)
     RUN_TEST(test_SW07_read_error_makes_slot_invalid);
     RUN_TEST(test_SW07_power_cut_at_any_point_loads_last_complete_slot);
     RUN_TEST(test_SW07_power_cut_during_first_save_gives_defaults_or_new);
+    RUN_TEST(test_SW07_validate_row_mask_keeps_an_active_row);
+    RUN_TEST(test_SW07_save_after_boot_read_error_beats_existing_slot);
     return UNITY_END();
 }

@@ -56,6 +56,7 @@ typedef struct {
     /* Configuration, fixed at init. */
     geo_mount_t mount[TOF_NUM_SENSORS];
     geo_vec3_t ray_b[TOF_NUM_SENSORS][TOF_MAX_ZONES]; /* unit centre ray in the body frame, raw index */
+    geo_zone_extent_t extent[TOF_NUM_SENSORS][TOF_MAX_ZONES]; /* MAP-02: stored extent, raw index */
     uint64_t sector_zones[TOF_NUM_SECTORS][TOF_NUM_SENSORS]; /* raw-zone masks, extent + CAL_TOL */
     uint64_t sector_core[TOF_NUM_SECTORS][TOF_NUM_SENSORS];  /* same without CAL_TOL (angle_ok) */
     bool in_fov[TOF_NUM_SECTORS];

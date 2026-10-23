@@ -18,8 +18,17 @@ static const param_id_t k_z[TOF_NUM_SENSORS] = {PARAM_MOUNT_Z_M_L, PARAM_MOUNT_Z
 static const param_id_t k_orient[TOF_NUM_SENSORS] = {
     PARAM_ORIENT_TRANSFORM_L, PARAM_ORIENT_TRANSFORM_C, PARAM_ORIENT_TRANSFORM_R};
 
+/* REQ: MAP-09. Wrap-safe age of a time stamp; a stamp slightly after now_us (frame stamped by the
+ * ISR after the loop read the clock) counts as age 0 instead of wrapping to ~71 min. */
+static uint32_t age_us(uint32_t now_us, uint32_t t_us)
+{
+    const uint32_t d = now_us - t_us;
+    return (d > 0x80000000u) ? 0u : d;
+}
+
 /* Sector k covers [5k - 2.5, 5k + 2.5) deg; the zone covers [lo - tol, hi + tol]. Touching edges
  * do not count as an intersection. */
+/* REQ: MAP-05 */
 static bool sector_hit(float lo, float hi, float tol, uint8_t k)
 {
     const float mid = 0.5f * (lo + hi);
@@ -59,11 +68,11 @@ void fusion_init(fusion_t *f, const params_t *p)
             f->ray_b[s][z] = geo_mat_apply(
                 f->mount[s].r_bs,
                 geo_dir_sensor(geo_zone_alpha_deg(f->res, j), geo_zone_beta_deg(f->res, i)));
+            geo_zone_extent(&f->mount[s], i, j, &f->extent[s][z]);
             if (((row_mask >> i) & 1u) == 0u) {
                 continue; /* MAP-04: masked rows do not enter the map */
             }
-            geo_zone_extent_t e;
-            geo_zone_extent(&f->mount[s], i, j, &e);
+            const geo_zone_extent_t e = f->extent[s][z];
             for (uint8_t k = 0; k < TOF_NUM_SECTORS; k++) {
                 if (sector_hit(e.az_min_deg, e.az_max_deg, tol, k)) {
                     f->sector_zones[k][s] |= (uint64_t)1u << z;
@@ -118,9 +127,10 @@ static void classify_zone(const fusion_t *f, uint8_t s, uint8_t z, const tof_zon
     out->dist_cm = best;
     if (found) {
         out->cls = ZONE_OCC;
-    } else if (f->ccfg.clear_enabled && zone->ambient_per_spad <= f->ambient_clear_max &&
+    } else if ((!f->ccfg.clear_enabled || zone->ambient_per_spad <= f->ambient_clear_max) &&
                q.n_valid == q.n_targets && !too_close) {
-        /* Confirmed absence: every reported target valid and beyond max_distance (DEV-02). */
+        /* 5.3 CLR: every reported target valid and beyond max_distance. The ambient limit applies
+         * only when CLEAR_MEASURED is enabled; when it is off, CLR releases to UNKNOWN (DEV-02). */
         out->cls = ZONE_CLR;
     } else {
         out->cls = ZONE_INV;
@@ -156,7 +166,7 @@ bool fusion_ready(const fusion_t *f, const sensor_health_t health[TOF_NUM_SENSOR
     uint32_t oldest_age = 0u;
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
         if (f->frame[s].fresh) {
-            const uint32_t age = now_us - f->frame[s].t_us;
+            const uint32_t age = age_us(now_us, f->frame[s].t_us);
             any = true;
             oldest_age = (age > oldest_age) ? age : oldest_age;
         } else if (health[s] != SENSOR_FAILED) {
@@ -180,6 +190,7 @@ map_state_t fusion_map_state(const sensor_health_t health[TOF_NUM_SENSORS])
 }
 
 /* One sector: candidate over all zones whose extent hits it (5.3 overlap rules), then MAP-13. */
+/* REQ: MAP-05, MAP-09, MAP-10, MAP-13 */
 static void step_sector(fusion_t *f, uint8_t k, const bool used[TOF_NUM_SENSORS], uint32_t now_us)
 {
     const uint8_t nz = (uint8_t)(f->res * f->res);
@@ -202,7 +213,7 @@ static void step_sector(fusion_t *f, uint8_t k, const bool used[TOF_NUM_SENSORS]
             continue;
         }
         const fusion_frame_t *ff = &f->frame[s];
-        const uint32_t age = now_us - ff->t_us;
+        const uint32_t age = age_us(now_us, ff->t_us);
         if (!have_t || age > oldest_age) {
             have_t = true;
             oldest_age = age;
@@ -253,7 +264,7 @@ void fusion_run(fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS], uint
     uint32_t newest_age = 0u;
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
         if (f->frame[s].fresh) {
-            const uint32_t age = now_us - f->frame[s].t_us;
+            const uint32_t age = age_us(now_us, f->frame[s].t_us);
             newest_age = (!any || age < newest_age) ? age : newest_age;
             any = true;
         }
@@ -264,7 +275,7 @@ void fusion_run(fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS], uint
         if (!f->frame[s].fresh) {
             continue;
         }
-        if ((now_us - f->frame[s].t_us) - newest_age > f->window_us) {
+        if (age_us(now_us, f->frame[s].t_us) - newest_age > f->window_us) {
             f->frames_late_total++; /* older than the newest frame by more than the window */
         } else {
             used[s] = health[s] != SENSOR_FAILED;
@@ -287,7 +298,7 @@ export_state_t fusion_export_state(const fusion_t *f, uint8_t sector, uint32_t n
     if (!f->in_fov[sector]) {
         return EXPORT_OUT_OF_FOV;
     }
-    if (!f->cell_has_time[sector] || (uint32_t)(now_us - f->cell_t_us[sector]) > f->max_age_us) {
+    if (!f->cell_has_time[sector] || age_us(now_us, f->cell_t_us[sector]) > f->max_age_us) {
         return EXPORT_STALE;
     }
     switch (f->cell[sector].state) {

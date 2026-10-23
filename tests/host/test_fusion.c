@@ -464,6 +464,7 @@ void test_MAP13_map_holds_obstacle_on_invalid_frames_then_unknown(void)
     }
     TEST_ASSERT_EQUAL_UINT32(0u, g_f.hold_expired_total);
     frame_empty(TOF_SENSOR_C, T0 + 520u * MS);
+    zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 255u);
     push(TOF_SENSOR_C);
     fusion_run(&g_f, k_all_ok, T0 + 520u * MS);
     fusion_export(&g_f, T0 + 520u * MS, d);
@@ -490,6 +491,44 @@ void test_MAP13_map_closer_immediate_farther_after_relax(void)
     TEST_ASSERT_UINT16_WITHIN(1u, expect_cm(1u, 1.5f), got[1]);
     TEST_ASSERT_UINT16_WITHIN(1u, expect_cm(1u, 1.5f), got[2]);
     TEST_ASSERT_UINT16_WITHIN(1u, expect_cm(1u, 2.5f), got[3]);
+}
+
+/* A frame stamped slightly after now_us (ISR after the loop read the clock) is not lost. */
+void test_MAP09_frame_stamped_after_now_is_used(void)
+{
+    frame_empty(TOF_SENSOR_C, T0 + 1u);
+    zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 5u);
+    frame_empty(TOF_SENSOR_R, T0);
+    push(TOF_SENSOR_C);
+    push(TOF_SENSOR_R);
+    TEST_ASSERT_FALSE(fusion_ready(&g_f, k_all_ok, T0)); /* L missing, no wrap to a huge age */
+    fusion_run(&g_f, k_all_ok, T0);
+    TEST_ASSERT_EQUAL_UINT32(0u, g_f.frames_late_total);
+    TEST_ASSERT_EQUAL_INT(CELL_OCCUPIED, g_f.cell[1].state);
+    TEST_ASSERT_EQUAL_INT(EXPORT_OCCUPIED, fusion_export_state(&g_f, 1u, T0));
+}
+
+/* Default (CLEAR_MEASURED off): confirmed CLR releases to UNKNOWN after 3 frames, not by hold expiry. */
+void test_MAP13_map_default_release_by_clr_to_unknown(void)
+{
+    frame_empty(TOF_SENSOR_C, T0);
+    zone_target(TOF_SENSOR_C, 1u, 2u, 2000, 5u);
+    push(TOF_SENSOR_C);
+    fusion_run(&g_f, k_all_ok, T0);
+    for (uint32_t n = 1; n <= 3u; n++) {
+        push_empty_all(T0 + n * 66u * MS);
+        fusion_run(&g_f, k_all_ok, T0 + n * 66u * MS);
+        TEST_ASSERT_EQUAL_INT(n < 3u ? CELL_OCCUPIED : CELL_UNKNOWN, g_f.cell[1].state);
+    }
+    TEST_ASSERT_EQUAL_UINT32(0u, g_f.hold_expired_total);
+    TEST_ASSERT_EQUAL_INT(EXPORT_UNKNOWN, fusion_export_state(&g_f, 1u, T0 + 198u * MS));
+}
+
+void test_MAP02_extent_is_stored_per_zone(void)
+{
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, -22.5f, g_f.extent[TOF_SENSOR_C][1u * 4u + 0u].az_min_deg);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 52.5f, g_f.extent[TOF_SENSOR_R][2u * 4u + 3u].az_max_deg);
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, -11.25f, g_f.extent[TOF_SENSOR_L][3u * 4u + 0u].beta_max_deg);
 }
 
 int main(void)
@@ -520,5 +559,8 @@ int main(void)
     RUN_TEST(test_MAP11_map_state_ok_degraded_lost);
     RUN_TEST(test_MAP13_map_holds_obstacle_on_invalid_frames_then_unknown);
     RUN_TEST(test_MAP13_map_closer_immediate_farther_after_relax);
+    RUN_TEST(test_MAP09_frame_stamped_after_now_is_used);
+    RUN_TEST(test_MAP13_map_default_release_by_clr_to_unknown);
+    RUN_TEST(test_MAP02_extent_is_stored_per_zone);
     return UNITY_END();
 }

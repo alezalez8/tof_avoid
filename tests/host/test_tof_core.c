@@ -163,6 +163,22 @@ void test_MAP05_core_is_deterministic(void)
     TEST_ASSERT_EQUAL_MEMORY(a.fusion.cell, b.fusion.cell, sizeof a.fusion.cell);
 }
 
+/* MAP-12: a sensor in reinit is not waited for: the map follows the healthy sensors at once. */
+void test_MAP09_core_does_not_wait_for_reinit_sensor(void)
+{
+    (void)run(&g_c, 0u, 2u, 0x7u, 0);
+    const uint32_t t = 2u * PERIOD_US;
+    tof_core_sensor_error(&g_c, TOF_SENSOR_C, t);
+    tof_core_sensor_error(&g_c, TOF_SENSOR_C, t);
+    tof_core_sensor_error(&g_c, TOF_SENSOR_C, t);
+    TEST_ASSERT_TRUE(tof_core_take_reinit_request(&g_c, TOF_SENSOR_C));
+    make_frame(TOF_SENSOR_L, 2u, t, 0);
+    (void)tof_core_push_frame(&g_c, &g_fr, t);
+    make_frame(TOF_SENSOR_R, 2u, t, 0);
+    (void)tof_core_push_frame(&g_c, &g_fr, t);
+    TEST_ASSERT_TRUE(tof_core_update(&g_c, t));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -173,5 +189,6 @@ int main(void)
     RUN_TEST(test_SNS11_core_one_sensor_stops);
     RUN_TEST(test_MAP11_core_all_sensors_silent_lost);
     RUN_TEST(test_MAP05_core_is_deterministic);
+    RUN_TEST(test_MAP09_core_does_not_wait_for_reinit_sensor);
     return UNITY_END();
 }
