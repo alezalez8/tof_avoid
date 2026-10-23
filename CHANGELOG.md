@@ -3,6 +3,21 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/) (SW-10).
 Версия прошивки задаётся в `core/include/core/version.h`.
 
+## [Unreleased] — E3 «SITL», часть 1 (остановлен по DEV-14)
+
+### Добавлено
+
+- `tools/emulator/tof_sil`: ядро без изменений + имитация платы для SITL (UART как TCP к SERIAL-порту SITL с темпом
+  `UART_BAUD`, кадры по UDP, слоты параметров в файле, переинициализация датчика); лог JSON Lines.
+- `tools/emulator/scene.py`: синтетическая сцена (земля, боксы, столбы, стены), модель трёх VL53L8CX 4×4 с двумя целями
+  на зону, шум, пропуски, засветка, задержка, отказ датчика, фантомы; поза из SITL.
+- `tools/emulator/harness.py`, `scenarios/`, `run_all.sh`, `make_reports.py`: сценарии T-12 (a, b) и T-26 (a…e),
+  итоговая таблица и отчёты `docs/reports/T-12_2026-10-24.md`, `docs/reports/T-26_2026-10-24.md`.
+- `params/sitl_tof.param`, `params/fc_tof_v1.param` (FC-01; имена сверены с 4.7.2: `MAVn_*`, `WP_SPD`,
+  `RTL_SPEED_MS`, `GUID_OPTIONS` бит 6), `params/module_sitl.json`.
+- DEV-13 (`RCx_OPTION = 40` не выключает BendyRuler в 4.7.2), DEV-14 (T-26 не пройден при дальномере ниже минимума на
+  земле: варианты политики экспорта переходных фаз).
+
 ## [Unreleased] — DEV-12, п. 5, 6, 7, 9, 10 (решение человека); E1 закрыт
 
 ### Изменено

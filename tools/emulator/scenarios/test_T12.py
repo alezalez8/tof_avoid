@@ -60,7 +60,7 @@ def check_map(res, label, ods, max_cm, clear_on):
     feet = set()
     for oid, (az, d) in EXPECT.items():
         k0 = sector_of(az)
-        res.metric("%s_%s_sector%d_cm" % (label, oid, k0), med[k0])
+        res.metric("%s_%s_sector%d_cm" % (label, oid, k0), med[k0], key=(label == "hover"))
         res.check("%s: %s sector %d (%+.0f deg) = %.0f cm" % (label, oid, k0, az, d * 100),
                   abs(med[k0] - d * 100) <= 10, med[k0], "%.0f +- 10" % (d * 100))
         foot = [k for k in range(72) if abs(med[k] - d * 100) <= 15]
@@ -73,7 +73,7 @@ def check_map(res, label, ods, max_cm, clear_on):
     if clear_on:
         free = [k for k in range(72) if ang_diff(k * 5.0, 0.0) <= 50.0 and k not in feet]
         clr = [k for k in free if med[k] == max_cm + 1]
-        res.metric(label + "_clear_sectors", [k * 5 if k <= 36 else k * 5 - 360 for k in clr])
+        res.metric(label + "_clear_sectors_301", len(clr), key=True)
         res.check(label + ": every empty FoV sector = max + 1 (CLEAR_MEASURED)", free and len(clr) == len(free),
                   "%d of %d" % (len(clr), len(free)), "all, %d = %d cm" % (len(free), max_cm + 1))
     return med
@@ -157,7 +157,7 @@ def test_T12_a_default():
         st.module.start()
         t_good = g.wait(lambda: (g.latest("SYS_STATUS").onboard_control_sensors_health & H.PRX_BIT) and time.time(),
                         30, "PRX Good")
-        res.metric("prx_good_after_module_start_s", round(t_good - t_mod, 2))
+        res.metric("prx_good_after_module_start_s", round(t_good - t_mod, 2), key=True)
         res.check("PRX Good after the module start", True, "%.1f s" % (t_good - t_mod), "-")
         st.wait_ready(60)
 
@@ -195,7 +195,7 @@ def test_T12_a_default():
         res.check("ICD-02: every packet sent arrives (GCS count = module count +- 2)", abs(n_gcs - len(sent)) <= 2,
                   "%d / %d" % (n_gcs, len(sent)), "+- 2")
         rate = len(sent) / (t2 - t1)
-        res.metric("od_rate_hz", round(rate, 2))
+        res.metric("od_rate_hz", round(rate, 2), key=True)
         res.check("OBSTACLE_DISTANCE rate = MAV_DISTANCE_RATE_HZ", 9.0 <= rate <= 10.5, round(rate, 2), "10 Hz")
         tu = [m.time_usec for t, m in g.history("OBSTACLE_DISTANCE", H.MODULE_COMPID, t1)]
         res.check("time_usec increases", all(b > a for a, b in zip(tu, tu[1:])), "monotonic", "monotonic")

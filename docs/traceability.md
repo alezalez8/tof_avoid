@@ -7,7 +7,7 @@
 Для требований, у которых критерий ТЗ включает тесты HIL/стенда, статус остаётся **impl**, пока эти тесты не пройдены,
 даже если host-часть (T-00) проходит.
 
-Обновляется в том же коммите, что и код. Последнее обновление: 2026-10-23, этап E1b + уточнения ТЗ 5.7.
+Обновляется в том же коммите, что и код. Последнее обновление: 2026-10-24, этап E3 (T-12, T-26; остановлен по DEV-14).
 
 ## SNS — сенсорная подсистема
 
@@ -54,20 +54,20 @@
 | MAP-14a | 5.6: высоты от центра корпуса, h_p = h_body − z_L(p_B) с t_m; h_body по дальномеру с RF_XYZ_M, на земле — TOF_HEIGHT_GROUND_M с MOUNT_XYZ_M | `core/src/geometry.c`: `geo_point_height`, `geo_body_height_from_sensor`, `geo_body_height_from_rf`; `core/src/ground.c`: `ground_body_height` (источник по фазе); `core/src/scheduler.c`: `sched_push_frame` (дальномер из `mavlink_rx`, ATTITUDE на момент кадра) | T-00: `test_MAP14a_*`, `test_MAP15_body_height_values`, `test_MAP17_flight_keep_exports_ground` — pass | pass |
 | MAP-14b | 5.7: CAL_TOL_DEG — только по азимуту, по углу места — CAL_TOL_EL_DEG (0,5°) | `params_table.h`: `CAL_TOL_EL_DEG` (формат слота 3); `core/src/ground.c`: `ground_min_height` (`half_a` / `half_b`); `core/src/scheduler.c`: `sched_push_frame` | T-00: `test_MAP14b_tolerances_by_axis`, `test_MAP14_extent_not_centre_ray`, `test_MAP14_min_height_matches_sampling` — pass; T-06, T-25 | impl |
 | 5.1 (DEV-12 п. 6) | ATTITUDE интерполируется на середину экспозиции: t_ready − `EXPOSURE_OFFSET_MS` (0 = половина периода кадра) | `params_table.h`: `EXPOSURE_OFFSET_MS` (формат слота 4); `core/src/scheduler.c`: `sched_capture_time_us`, `sched_push_frame`, лог карты (`att_valid`, `pitch_rad`, `roll_rad`) | T-00: `test_MAP14_attitude_at_mid_exposure` — pass; уточнение смещения — T-05, T-22 | impl |
-| MAP-15 | Источник h_tof по фазам | `core/src/ground.c`: `ground_height_source`, `ground_body_height`; `core/src/scheduler.c`: `sched_push_frame` (контекст земли кадра), `phase_height` (высота для автомата фаз) | T-00: `test_MAP15_*` — pass; T-26 — E3 | impl |
-| MAP-15b | 5.7: TAKEOFF / IN_AIR / LANDING без валидной высоты > 500 мс — земля не распознаётся, IN_AIR → FLIGHT, TOF_HEIGHT_GROUND_M в воздухе не используется | `core/src/mavlink_rx.c`: `mavrx_rf_valid` (последний валидный отсчёт не старше 500 мс); `core/src/ground.c`: `ground_height_source`; `core/src/phase.c`: `in_air`; `core/src/scheduler.c`: `phase_height` | T-00: `test_MAP15b_*` (`test_phase`, `test_scheduler`), `test_MAP15_height_source_by_phase`, `test_MAP15_rangefinder` — pass; T-26 — E3 | impl |
-| MAP-16 | Автомат полётных фаз | `core/src/phase.c`: `phase_update` (`next_known`, `in_air` — подтверждение 1 с с гистерезисом), `phase_init`; `core/src/scheduler.c`: `update_phase` (вход от `mavlink_rx`, сброс ячеек и эпизодов в GROUND_RECOVER) | T-00: `test_phase` `test_MAP16_*` — каждый переход; `test_MAP16_ground_recover_resets_cells` — pass; T-26 — E3 | impl |
-| MAP-16a | 5.7: без гистерезиса по высоте; вход в FLIGHT — 1 с на PHASE_H_FLIGHT_M (или MAP-15b); выход — только LANDING / ON_GROUND / PHASE_UNKNOWN | `core/src/phase.c`: `next_known` (FLIGHT при LS = IN_AIR / TAKEOFF и при disarm в воздухе), `in_air` (перезапуск подтверждения при любом h < порога), `phase_update` (возврат из PHASE_UNKNOWN — только по правилу входа) | T-00: `test_MAP16a_*`, `test_MAP16_flight_confirmation_restarts_on_dip` — pass; T-26 — E3 | impl |
-| MAP-17 | Политика экспорта по фазам | `core/src/phase.c`: `phase_export_ground`, `phase_hold_allowed`; `core/src/fusion.c`: два вида карты `FUSION_VIEW_ALL` / `FUSION_VIEW_REAL`, `fusion_export_view`; `core/src/scheduler.c`: `on_new_map` (выбор вида по фазе) | T-00: `test_MAP17_*` (`test_phase` — каждая строка таблицы 5.4; `test_ground` — реальное препятствие за землёй; `test_scheduler` — земля 65535 на стоянке, KEEP в FLIGHT, 65535 в LANDING) — pass; T-25, T-26 | impl |
+| MAP-15 | Источник h_tof по фазам | `core/src/ground.c`: `ground_height_source`, `ground_body_height`; `core/src/scheduler.c`: `sched_push_frame` (контекст земли кадра), `phase_height` (высота для автомата фаз) | T-00: `test_MAP15_*` — pass; T-26 SITL (`docs/reports/T-26_2026-10-24.md`): a, b, d, e — pass, c — **fail** (DEV-14) | impl |
+| MAP-15b | 5.7: TAKEOFF / IN_AIR / LANDING без валидной высоты > 500 мс — земля не распознаётся, IN_AIR → FLIGHT, TOF_HEIGHT_GROUND_M в воздухе не используется | `core/src/mavlink_rx.c`: `mavrx_rf_valid` (последний валидный отсчёт не старше 500 мс); `core/src/ground.c`: `ground_height_source`; `core/src/phase.c`: `in_air`; `core/src/scheduler.c`: `phase_height` | T-00: `test_MAP15b_*` (`test_phase`, `test_scheduler`), `test_MAP15_height_source_by_phase`, `test_MAP15_rangefinder` — pass; T-26 SITL (`docs/reports/T-26_2026-10-24.md`): a, b, d, e — pass, c — **fail** (DEV-14): при дальномере ниже минимума на земле MAP-15b выключает распознавание в TAKEOFF и после касания; d — FLIGHT без высоты выше 7 м | impl |
+| MAP-16 | Автомат полётных фаз | `core/src/phase.c`: `phase_update` (`next_known`, `in_air` — подтверждение 1 с с гистерезисом), `phase_init`; `core/src/scheduler.c`: `update_phase` (вход от `mavlink_rx`, сброс ячеек и эпизодов в GROUND_RECOVER) | T-00: `test_phase` `test_MAP16_*` — каждый переход; `test_MAP16_ground_recover_resets_cells` — pass; T-26 SITL a…e: последовательность фаз 5.4 и задержка ≤ 0,2 с от `landed_state` FC — pass во всех подпунктах; T-26 в целом не пройден (DEV-14) | impl |
+| MAP-16a | 5.7: без гистерезиса по высоте; вход в FLIGHT — 1 с на PHASE_H_FLIGHT_M (или MAP-15b); выход — только LANDING / ON_GROUND / PHASE_UNKNOWN | `core/src/phase.c`: `next_known` (FLIGHT при LS = IN_AIR / TAKEOFF и при disarm в воздухе), `in_air` (перезапуск подтверждения при любом h < порога), `phase_update` (возврат из PHASE_UNKNOWN — только по правилу входа) | T-00: `test_MAP16a_*`, `test_MAP16_flight_confirmation_restarts_on_dip` — pass; T-26 SITL: вход в FLIGHT через 1,0–1,1 с после начала первого участка (замечание O-3 в DEV-14) | impl |
+| MAP-17 | Политика экспорта по фазам | `core/src/phase.c`: `phase_export_ground`, `phase_hold_allowed`; `core/src/fusion.c`: два вида карты `FUSION_VIEW_ALL` / `FUSION_VIEW_REAL`, `fusion_export_view`; `core/src/scheduler.c`: `on_new_map` (выбор вида по фазе) | T-00: `test_MAP17_*` (`test_phase` — каждая строка таблицы 5.4; `test_ground` — реальное препятствие за землёй; `test_scheduler` — земля 65535 на стоянке, KEEP в FLIGHT, 65535 в LANDING) — pass; T-26 SITL (`docs/reports/T-26_2026-10-24.md`): a, b, d, e — pass, c — **fail** (DEV-14); T-25 — E6/E7 | impl |
 | MAP-18 | Две цели в зоне классифицируются отдельно; земля — только если все цели совместимы | `core/src/fusion.c`: `classify_zone` (каждая цель — `ground_target_compatible`; `zone.ground`, `cls_real`), `mark_target` | T-00: `test_MAP18_*` (зона земли, смешанная зона «земля + низкая цель») — pass; T-25 — E6/E7 | impl |
-| MAP-19 | Классификация земли не подтверждена до T-25 и T-26 | `core/include/core/ground.h` (статус в комментарии модуля); DROP заблокирован (MAP-07a) | T-00: `test_MAP19_low_object_near_ground_not_distinguished` (фиксирует ограничение модели); T-25, T-26 | impl |
+| MAP-19 | Классификация земли не подтверждена до T-25 и T-26 | `core/include/core/ground.h` (статус в комментарии модуля); DROP заблокирован (MAP-07a) | T-00: `test_MAP19_low_object_near_ground_not_distinguished` (фиксирует ограничение модели); T-26 SITL (`docs/reports/T-26_2026-10-24.md`): a, b, d, e — pass, c — **fail** (DEV-14); T-25 — E6/E7 | impl |
 
 ## ICD — интерфейс MAVLink
 
 | ID | Требование (кратко) | Файл / функция | Тест | Статус |
 | --- | --- | --- | --- | --- |
-| ICD-01 | Кодирование полей по таблицам раздела 6 | `core/src/mavlink_tx.c`: `mavtx_obstacle_distance`, `mavtx_heartbeat`, `mavtx_statustext`, `mavtx_set_message_interval`, `mavtx_hold_mode`, `mavtx_named_value_int`, `mavtx_command_ack`; `core/src/mavlink_rx.c`: `dispatch` (HEARTBEAT FC, EXTENDED_SYS_STATE, ATTITUDE, DISTANCE_SENSOR 25, COMMAND_ACK) | T-00: `test_mavlink` `test_ICD01_*` (каждое поле OBSTACLE_DISTANCE, MAVLink 2 без флагов несовместимости) — pass; T-12 — E3 | impl |
-| ICD-02 | Один OBSTACLE_DISTANCE на кадр карты | `core/src/scheduler.c`: `on_new_map` (один пакет на объединённую карту, ограничение `MAV_DISTANCE_RATE_HZ` — маркерная корзина, в среднем) | T-00: `test_ICD02_one_message_per_map`, `test_ICD01_distance_rate_limit` — pass; T-12 — E3 | impl |
+| ICD-01 | Кодирование полей по таблицам раздела 6 | `core/src/mavlink_tx.c`: `mavtx_obstacle_distance`, `mavtx_heartbeat`, `mavtx_statustext`, `mavtx_set_message_interval`, `mavtx_hold_mode`, `mavtx_named_value_int`, `mavtx_command_ack`; `core/src/mavlink_rx.c`: `dispatch` (HEARTBEAT FC, EXTENDED_SYS_STATE, ATTITUDE, DISTANCE_SENSOR 25, COMMAND_ACK) | T-00: `test_mavlink` `test_ICD01_*` (каждое поле OBSTACLE_DISTANCE, MAVLink 2 без флагов несовместимости) — pass; T-12 SITL a, b (`docs/reports/T-12_2026-10-24.md`) — pass | pass |
+| ICD-02 | Один OBSTACLE_DISTANCE на кадр карты | `core/src/scheduler.c`: `on_new_map` (один пакет на объединённую карту, ограничение `MAV_DISTANCE_RATE_HZ` — маркерная корзина, в среднем) | T-00: `test_ICD02_one_message_per_map`, `test_ICD01_distance_rate_limit` — pass; T-12 SITL: 100 пакетов за 10 с, все уникальны и дошли до FC, 9,99 Гц — pass; T-12 HIL — E6 | impl |
 | ICD-03 | Парсер устойчив к мусору, счётчик ошибок CRC | `core/src/mavlink_rx.c`: `mavrx_feed` (`mavlink_frame_char_buffer` со своими буферами, `stats.crc_errors`, `stats.parse_errors`) | T-00: `test_ICD03_*` (fuzz: мусор, мусор между пакетами с разрезанием, обрывы и битые биты, одиночная ошибка CRC) — pass | pass |
 | ICD-04 | Команды от GCS не исполняются; COMMAND_LONG на compid 196 → UNSUPPORTED | `core/src/mavlink_rx.c`: `refuse`, `mavrx_take_nack` (COMMAND_LONG и COMMAND_INT); `core/src/mavlink_tx.c`: `mavtx_command_ack`; `core/src/scheduler.c`: `handle_rx` | T-00: `test_ICD04_commands_refused`, `test_ICD04_unsupported_on_wire` — pass | pass |
 | ICD-05 | UART через DMA без блокировки цикла | — | T-11 | todo |
@@ -93,7 +93,7 @@
 
 | ID | Требование (кратко) | Файл / функция | Тест | Статус |
 | --- | --- | --- | --- | --- |
-| FC-01 | `params/fc_tof_v1.param` с версией прошивки FC | — | Ревью | todo |
+| FC-01 | `params/fc_tof_v1.param` с версией прошивки FC | `params/fc_tof_v1.param` (ArduCopter V4.7.2, fb773567; имена сверены с 4.7.2, DEV-13), `params/sitl_tof.param` (тот же набор + SITL) | Ревью человеком; все имена существуют в 4.7.2 (проверка в SITL) | impl |
 | FC-02 | В ручных режимах препятствие не меняет управление | — | T-16 | todo |
 | FC-03 | В AUTO/GUIDED/RTL — штатная реакция BendyRuler; неизвестные сектора и вне FoV проверены | — | T-13 | todo |
 
@@ -170,7 +170,7 @@
 | T-09 | HIL | Человек | E7 | DIA-01 | — | todo |
 | T-10 | Стенд | Человек + агент | E7 | MAP-03, SPD-01, SPD-04, DIA-06, H-13 | — | todo |
 | T-11 | HIL | Агент | E6 | MAP-12, ICD-05, SW-05, SW-06, SW-08, DIA-02, DIA-06, DIA-08 | — | todo |
-| T-12 | SITL, HIL | Агент | E3, E6 | ICD-01, ICD-02, HW-09, H-10 | — | todo |
+| T-12 | SITL, HIL | Агент | E3, E6 | ICD-01, ICD-02, HW-09, H-10 | `docs/reports/T-12_2026-10-24.md`: SITL a, b — pass; H-10 подтверждена (PreArm PRX1 No Data) | SITL pass, HIL todo |
 | T-13 | SITL | Агент | E3 | FC-03, H-08 | — | todo |
 | T-14 | SITL, HIL | Агент | E3, E6 | FLT-01, FLT-02 | — | todo |
 | T-15 | SITL | Агент | E3 | FLT-03, FLT-04, FLT-06 | — | todo |
@@ -184,5 +184,5 @@
 | T-23 | Полёт | Человек | E8 | SPD-01, SPD-02, H-12 | — | todo |
 | T-24 | Стенд | Человек | E7 | HW-05 | — | todo |
 | T-25 | HIL, стенд | Агент + человек | E6, E7 | MAP-14, MAP-17, MAP-18, MAP-19, DIA-04 | — | todo |
-| T-26 | SITL, затем полёт | Агент, человек | E3, E8 | **Блокирующий.** MAP-15, MAP-16, MAP-17, MAP-19, H-14 | — | todo |
+| T-26 | SITL, затем полёт | Агент, человек | E3, E8 | **Блокирующий.** MAP-15, MAP-16, MAP-17, MAP-19, H-14 | `docs/reports/T-26_2026-10-24.md`: a, b, d, e — pass; c (дальномер ниже минимума на земле) — fail; DEV-14 | **SITL fail** |
 | T-27 | HIL | Агент | E6 | SW-07 | — | todo |

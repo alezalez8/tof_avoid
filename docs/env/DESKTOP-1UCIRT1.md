@@ -100,8 +100,17 @@ python3 3.10.12 — без изменений. gcovr — системный (в 
 
 Изоляция SITL tof_avoid от других проектов (в т. ч. `claude_prog`): свой рабочий каталог внутри проекта
 (`build/sitl_run/`, в `.gitignore`), свои параметры (`params/`), свой номер инстанса и порты.
-Предварительно: `sim_vehicle.py -v ArduCopter -I 5 --use-dir=<проект>/build/sitl_run --no-rebuild`
-(инстанс 5: базовые порты +50, TCP 5810). Окончательная команда фиксируется на этапе E3.
+Команда E3 (2026-10-24, без MAVProxy и `sim_vehicle.py`; запускает `tools/emulator/harness.py`, рабочий каталог —
+`build/sitl_run/<сценарий>/`, копия команды — `sitl_cmd.txt` там же):
+
+```
+~/ardupilot-4.7/build/sitl/bin/arducopter -S --model hexa --speedup 1 -I 5 -w   --defaults Tools/autotest/default_params/copter.parm,Tools/autotest/default_params/copter-hexa.parm,<проект>/params/sitl_tof.param[,scenario.param]   --home -35.363261,149.16523,584.0,0.0
+```
+
+Порты инстанса 5: SERIAL0 TCP 5810 (тестовый GCS, SITL ждёт подключения), SERIAL1 TCP 5812 (поза для `scene.py`),
+SERIAL2 TCP 5813 (модуль `tof_sil`); кадры сцены → модуль — UDP 14660, команды сцене — UDP 14661. Путь к дереву — из
+`TOF_ARDUPILOT` или по `sim_vehicle.py` в PATH. Особенность 4.7.2: параметры `OA_BR_*` из файлов умолчаний после `-w`
+не применяются (объект создаётся по `OA_TYPE`), обвязка повторяет весь набор через PARAM_SET и проверяет эхо.
 
 ## Remote
 
