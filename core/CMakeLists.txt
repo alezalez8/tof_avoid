@@ -1,5 +1,7 @@
 add_library(tof_core STATIC
     src/version.c
+    src/crc32.c
+    src/params.c
     src/geometry.c)
 
 target_include_directories(tof_core PUBLIC include)

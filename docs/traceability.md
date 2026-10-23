@@ -4,7 +4,10 @@
 **pass** — критерий ТЗ выполнен (юнит-тесты и/или отчёт `docs/reports/T-xx_*.md`).
 В колонке «Файл / функция» для E0 указаны заготовки каркаса; статус требования от них не меняется.
 
-Обновляется в том же коммите, что и код. Последнее обновление: 2026-10-23, этап E0.
+Для требований, у которых критерий ТЗ включает тесты HIL/стенда, статус остаётся **impl**, пока эти тесты не пройдены,
+даже если host-часть (T-00) проходит.
+
+Обновляется в том же коммите, что и код. Последнее обновление: 2026-10-23, этап E1a.
 
 ## SNS — сенсорная подсистема
 
@@ -116,7 +119,7 @@
 | SW-04 | ULD и MAVLink в third_party без изменений; platform-слой через bsp.h | `third_party/mavlink/c_library_v2` (submodule) | Diff с оригиналом | todo |
 | SW-05 | Кооперативный суперцикл, худшая итерация ≤ 5 мс | — | T-11 | todo |
 | SW-06 | Flash и RAM ≤ 80 % | — | Map-файл + T-11 | todo |
-| SW-07 | Таблица параметров, слоты A/B с CRC-32 | — | Юнит-тест + T-17, T-27 | todo |
+| SW-07 | Таблица параметров, слоты A/B с CRC-32 | `core/include/core/params_table.h` (таблица), `core/src/params.c`: `params_set_*`, `params_validate`, `params_store_load`, `params_store_save`; `core/src/crc32.c` | T-00: `test_params` (`test_SW07_*`, в т. ч. обрыв питания на каждом байте записи) — pass; T-17, T-27 — E6 | impl |
 | SW-08 | Сборки DEBUG / FLIGHT; assert → лог и управляемый сброс | — | T-11 | todo |
 | SW-09 | `-Wall -Wextra -Werror`, cppcheck без warning | `cmake/TofCompilerFlags.cmake`, `tools/scripts/cppcheck.sh` | Скрипт CI | todo |
 | SW-10 | Semver + git-хеш в прошивке; CHANGELOG.md | `core/include/core/version.h`, `core/src/version.c`: `tof_version_string`, `tof_version_git_hash`, `tof_version_number`; `CHANGELOG.md` | T-00: `test_SW10_*` | todo |

@@ -17,3 +17,4 @@ endfunction()
 
 tof_add_host_test(test_version test_version.c)
 tof_add_host_test(test_geometry test_geometry.c)
+tof_add_host_test(test_params test_params.c mock_flash.c)
