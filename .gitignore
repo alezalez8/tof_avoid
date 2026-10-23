@@ -1,10 +1,12 @@
-# Build trees
+# Build trees (includes build/sitl_run/ — SITL working directory)
 build/
+build/sitl_run/
 out/
 
 # Python
 .venv/
 venv/
+venvs/
 __pycache__/
 *.pyc
 .pytest_cache/

@@ -60,7 +60,31 @@ STM32CubeProgrammer 2.22.0 (отдельно), Keil µVision, Atmel ARM Toolchai
 | python3 | 3.10.12 |
 | venv проекта | `~/venvs/tof_avoid` — pymavlink 2.4.50, pytest 9.1.1 |
 
-Вызов: `wsl -e bash -lc "cd /mnt/d/stm32/tof_avoid && <команда>"`.
+Вызов: `wsl -e bash -lc "cd /mnt/d/stm32/tof_avoid && <команда>"`
+или без жёсткого пути: `wsl --cd <путь репозитория в Windows> -e bash -l tools/scripts/<скрипт>.sh` (так делают задачи VS Code).
+
+Версии перепроверены на этапе E0 (2026-10-23): gcc 11.4.0, cmake 3.22.1, ninja 1.10.1, gcovr 5.0, cppcheck 2.7,
+python3 3.10.12 — без изменений. gcovr — системный (в venv проекта его нет); скрипты активируют venv, если он есть.
+
+## Сборка (этап E0)
+
+| Что | Где | Команда |
+| --- | --- | --- |
+| host-debug: сборка + тесты | WSL2 | `tools/scripts/build_host.sh`, `tools/scripts/test.sh` |
+| host-coverage: отчёт и порог 90 % для `core/` | WSL2 | `tools/scripts/coverage.sh` → `build/host-coverage/coverage/index.html` |
+| cppcheck | WSL2 | `tools/scripts/cppcheck.sh` |
+| target-check: `core/` для Cortex-M4F, размер и проверка FPU | Windows, CubeCLT | `tools/scripts/build_target_check.ps1` |
+
+Каталоги сборки: `build/<preset>` в корне репозитория (host — из WSL, target — из Windows; не смешивать в одном каталоге).
+Тулчейн target-check — `cmake/arm-none-eabi-cortex-m4f.cmake`, инструменты берутся из PATH.
+
+## third_party (этап E0)
+
+| Компонент | Версия |
+| --- | --- |
+| mavlink/c_library_v2 | submodule, commit `6a776056` (2026-10-22, mavlink rev `eec88242`), диалект ardupilotmega, wire 2.0 |
+| Unity | submodule, тег v2.7.0 (`7f1a686a`) |
+| ST ULD (STSW-IMG040) | **нет** в `third_party/vl53l8cx_uld` — нужен архив от человека до E4 |
 
 ## ArduPilot SITL (только чтение)
 

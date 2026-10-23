@@ -1,0 +1,50 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 22, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "host-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "host-debug",
+      "inherits": "host-base",
+      "displayName": "Host debug (WSL2 gcc)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "host-coverage",
+      "inherits": "host-base",
+      "displayName": "Host coverage (WSL2 gcc + gcov)",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "TOF_COVERAGE": "ON" }
+    },
+    {
+      "name": "target-check",
+      "displayName": "Target check: core/ for Cortex-M4F (CubeCLT)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/arm-none-eabi-cortex-m4f.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "MinSizeRel" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "host-debug", "configurePreset": "host-debug" },
+    { "name": "host-coverage", "configurePreset": "host-coverage" },
+    { "name": "target-check", "configurePreset": "target-check", "targets": ["all", "core_size"] }
+  ],
+  "testPresets": [
+    {
+      "name": "host-debug",
+      "configurePreset": "host-debug",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "host-coverage",
+      "configurePreset": "host-coverage",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
