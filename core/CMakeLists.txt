@@ -12,6 +12,7 @@ add_library(tof_core STATIC
     src/mavlink_tx.c
     src/fault_fsm.c
     src/events.c
+    src/scheduler.c
     src/fusion.c
     src/tof_core.c)
 
