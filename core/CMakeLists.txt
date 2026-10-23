@@ -2,7 +2,8 @@ add_library(tof_core STATIC
     src/version.c
     src/crc32.c
     src/params.c
-    src/geometry.c)
+    src/geometry.c
+    src/quality.c)
 
 target_include_directories(tof_core PUBLIC include)
 target_compile_definitions(tof_core PRIVATE TOF_GIT_HASH="${TOF_GIT_HASH}")

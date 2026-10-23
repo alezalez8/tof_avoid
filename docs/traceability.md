@@ -18,7 +18,7 @@
 | SNS-03 | Блоб прошивки датчика во Flash один раз для трёх датчиков | — | Map-файл | todo |
 | SNS-04 | Готовность трёх датчиков ≤ 3 с | — | T-03 | todo |
 | SNS-05 | 4×4 (по умолчанию) / 8×8; частота — параметр | — | T-03 | todo |
-| SNS-06 | Ближайшая цель, 2 цели на зону, только нужные выходы ULD | — | Размер кадра в логе | todo |
+| SNS-06 | Ближайшая цель, 2 цели на зону, только нужные выходы ULD | `core/include/core/frame.h` (`tof_zone_t`: 6 выходов SNS-06), `TOF_TARGETS_PER_ZONE` в `config.h`; `quality_zone_eval` (≤ 2 цели) | T-00: `test_MAP03_zone_*` — pass; размер кадра в логе — E4 | impl |
 | SNS-07 | Расписание захвата SIMULTANEOUS / STAGGERED | — | T-04 | todo |
 | SNS-08 | Готовность кадра по INT или опрос ≤ 5 мс | — | T-05 | todo |
 | SNS-09 | Метаданные кадра: ID датчика, номер, время мкс, режим, частота | — | T-05 | todo |
@@ -33,7 +33,7 @@
 | --- | --- | --- | --- | --- |
 | MAP-01 | Системы координат и знаки по 5.1 | `core/src/geometry.c`: `geo_rot_x/y/z`, `geo_dir_sensor`, `geo_zone_alpha_deg`, `geo_zone_beta_deg` | T-00: `test_MAP01_*` — pass; T-06 — E7 | impl |
 | MAP-02 | Направления зон и преобразования ZYX; угловая протяжённость зоны | `core/src/geometry.c`: `geo_mount_init` (Rz·Ry·Rx), `geo_sensor_to_body`, `geo_body_to_level`, `geo_zone_extent`, `geo_point_height`, `geo_orient_apply/inverse` | T-00: `test_geometry` `test_MAP02_*` — весь список критерия (yaw/pitch/roll ±, −θ/0/+θ, тангаж/крен ±15°, высоты 0,2/1/7 м, зеркалирование, перекрытие, XYZ, обратимость) — pass | pass |
-| MAP-03 | Валидность цели: status ∈ VALID_STATUS, sigma, signal | — | Юнит-тест + T-10 | todo |
+| MAP-03 | Валидность цели: status ∈ VALID_STATUS, sigma, signal | `core/src/quality.c`: `quality_target_valid`, `quality_zone_eval` | T-00: `test_quality` `test_MAP03_*` — pass; T-10 — E7 | impl |
 | MAP-04 | Горизонтальная дистанция и азимут в корпусной СК; ROW_MASK | — | Юнит-тест | todo |
 | MAP-05 | Сетка 72 × 5°, зоны по протяжённости + CAL_TOL_DEG, без интерполяции | — | Юнит-тест | todo |
 | MAP-06 | GROUND_SUSPECT по MAP-14 и MAP-18 | — | — | todo |
