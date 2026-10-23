@@ -16,6 +16,9 @@ uint32_t bsp_time_us(void);
 
 void bsp_sim_init(void);
 
+/* Wall-clock time (CLOCK_REALTIME), us since the Unix epoch: aligns the log with SITL and scene logs. */
+uint64_t bsp_wall_us(void);
+
 /* Sleeps until a socket is readable or timeout_us elapses. */
 void bsp_wait(uint32_t timeout_us);
 

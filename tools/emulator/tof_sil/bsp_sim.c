@@ -38,6 +38,13 @@ uint32_t bsp_time_us(void)
     return (uint32_t)us;
 }
 
+uint64_t bsp_wall_us(void)
+{
+    struct timespec t;
+    clock_gettime(CLOCK_REALTIME, &t);
+    return (uint64_t)t.tv_sec * 1000000u + (uint64_t)t.tv_nsec / 1000u;
+}
+
 void bsp_wait(uint32_t timeout_us)
 {
     struct pollfd p[2];

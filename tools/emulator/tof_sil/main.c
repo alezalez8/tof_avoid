@@ -168,8 +168,11 @@ static void log_text(const char *s)
 static void log_start(params_load_result_t load)
 {
     static const char *const k_load[] = {"A", "B", "defaults"};
-    fprintf(g_log, "{\"k\":\"start\",\"t\":%u,\"ver\":\"%s\",\"git\":\"%s\",\"load\":\"%s\",\"params_crc\":\"%08x\",\"params\":{",
-            bsp_time_us(), tof_version_string(), tof_version_git_hash(), k_load[load], params_crc(&g_p));
+    const uint32_t t_us = bsp_time_us();
+    const uint64_t wall_us = bsp_wall_us();
+    fprintf(g_log, "{\"k\":\"start\",\"t\":%u,\"wall_us\":%llu,\"ver\":\"%s\",\"git\":\"%s\",\"load\":\"%s\",\"params_crc\":\"%08x\",\"params\":{",
+            t_us, (unsigned long long)wall_us, tof_version_string(), tof_version_git_hash(), k_load[load],
+            params_crc(&g_p));
     for (int k = 0; k < (int)PARAM_COUNT; k++) {
         const param_def_t *d = params_def((param_id_t)k);
         if (d->type == PARAM_TYPE_F32) {
