@@ -28,6 +28,7 @@ static void ctx(float pitch_deg, float roll_deg, float h_body)
     g_g.h_body_m = h_body;
     g_g.tol_m = 0.15f;
     g_g.cal_tol_deg = 2.0f;
+    g_g.cal_tol_el_deg = 0.5f;
 }
 
 void setUp(void)
@@ -48,14 +49,15 @@ static float ground_range(uint8_t n, uint8_t i, float pitch_deg, float h)
 /* Brute-force minimum of h_p over the zone box, for checking the exact maximum. */
 static float brute_min_height(const geo_mount_t *m, uint8_t i, uint8_t j, float r, const ground_ctx_t *g)
 {
-    const float half = 0.5f * geo_zone_width_deg(m->n) + g->cal_tol_deg;
+    const float half_a = 0.5f * geo_zone_width_deg(m->n) + g->cal_tol_deg;
+    const float half_b = 0.5f * geo_zone_width_deg(m->n) + g->cal_tol_el_deg;
     const float a_c = geo_zone_alpha_deg(m->n, j);
     const float b_c = geo_zone_beta_deg(m->n, i);
     float best = 1e9f;
     for (int ia = 0; ia <= 60; ia++) {
         for (int ib = 0; ib <= 60; ib++) {
-            const float a = a_c - half + (2.0f * half) * (float)ia / 60.0f;
-            const float b = b_c - half + (2.0f * half) * (float)ib / 60.0f;
+            const float a = a_c - half_a + (2.0f * half_a) * (float)ia / 60.0f;
+            const float b = b_c - half_b + (2.0f * half_b) * (float)ib / 60.0f;
             const geo_vec3_t d = geo_dir_sensor(a, b);
             const geo_vec3_t p = {d.x * r, d.y * r, d.z * r};
             const float h = geo_point_height(m, p, g->pitch_rad, g->roll_rad, g->h_body_m);
@@ -112,22 +114,32 @@ void test_MAP14_ground_20cm_top_row_is_obstacle(void)
     }
 }
 
-/* MAP-14: the check uses the zone extent (+CAL_TOL_DEG), not the centre ray. Row 1 points 5.6 deg up
- * (never ground by its centre ray), but its extent reaches -2 deg: from ~1.43 m on, some direction of
- * the zone is within GROUND_TOL_M of the ground. A 1.0 m target is a real obstacle. */
+/* MAP-14, MAP-14b: the check uses the zone extent, not the centre ray. Row 1 points 5.6 deg up (never
+ * ground by its centre ray); its extent with CAL_TOL_EL_DEG = 0.5 reaches -0.5 deg, so from ~5.7 m on
+ * some direction is within GROUND_TOL_M of the ground (upper edge at the horizon: a MAP-19 limitation).
+ * At 2 m it is a real obstacle. */
 void test_MAP14_extent_not_centre_ray(void)
 {
     const geo_vec3_t c = geo_dir_sensor(geo_zone_alpha_deg(4u, COL), geo_zone_beta_deg(4u, ROW_UP));
-    const float centre_h = geo_point_height(&g_m, (geo_vec3_t){c.x * 2.0f, c.y * 2.0f, c.z * 2.0f}, 0.0f,
+    const float centre_h = geo_point_height(&g_m, (geo_vec3_t){c.x * 6.0f, c.y * 6.0f, c.z * 6.0f}, 0.0f,
                                             0.0f, 0.20f);
     TEST_ASSERT_TRUE(centre_h > 0.15f); /* centre ray: no ground */
-    TEST_ASSERT_TRUE(ground_target_compatible(&g_m, ROW_UP, COL, 2.0f, &g_g));
-    TEST_ASSERT_FALSE(ground_target_compatible(&g_m, ROW_UP, COL, 1.0f, &g_g));
-    /* Lowest direction -11.25 / 2 - ... = -2 deg: h_p = 0.2 - r sin(2 deg). */
-    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.20f - 2.0f * sinf(deg(2.0f)), ground_min_height(&g_m, ROW_UP, COL, 2.0f, &g_g));
-    /* Without CAL_TOL_DEG the extent stops at 0 deg: never below 0.20 m. */
-    g_g.cal_tol_deg = 0.0f;
+    TEST_ASSERT_TRUE(ground_target_compatible(&g_m, ROW_UP, COL, 6.0f, &g_g));
     TEST_ASSERT_FALSE(ground_target_compatible(&g_m, ROW_UP, COL, 2.0f, &g_g));
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.20f - 2.0f * sinf(deg(0.5f)), ground_min_height(&g_m, ROW_UP, COL, 2.0f, &g_g));
+    /* Without the elevation tolerance the extent stops at 0 deg: never below 0.20 m. */
+    g_g.cal_tol_el_deg = 0.0f;
+    TEST_ASSERT_FALSE(ground_target_compatible(&g_m, ROW_UP, COL, 6.0f, &g_g));
+}
+
+/* MAP-14b: CAL_TOL_DEG widens the azimuth only; the elevation uses CAL_TOL_EL_DEG. */
+void test_MAP14b_tolerances_by_axis(void)
+{
+    g_g.cal_tol_deg = 10.0f; /* azimuth: no effect on the lowest direction of a level sensor */
+    TEST_ASSERT_FALSE(ground_target_compatible(&g_m, ROW_UP, COL, 2.0f, &g_g));
+    TEST_ASSERT_FLOAT_WITHIN(1e-3f, 0.20f - 2.0f * sinf(deg(0.5f)), ground_min_height(&g_m, ROW_UP, COL, 2.0f, &g_g));
+    g_g.cal_tol_el_deg = 2.0f; /* the E1b behaviour, for comparison: ground from ~1.43 m */
+    TEST_ASSERT_TRUE(ground_target_compatible(&g_m, ROW_UP, COL, 2.0f, &g_g));
 }
 
 /* MAP-14: GROUND_TOL_M is the threshold (<=). */
@@ -207,7 +219,7 @@ void test_MAP14a_offset_cancels_on_ground(void)
     TEST_ASSERT_FLOAT_WITHIN(1e-4f, without_offset, ground_min_height(&m, ROW_BOTTOM, COL, 0.5f, &g_g));
 }
 
-/* MAP-15: height source by phase. */
+/* MAP-15, MAP-15b: height source by phase; the ground parameter is never used in the air. */
 void test_MAP15_height_source_by_phase(void)
 {
     TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_FLIGHT, true));
@@ -216,9 +228,9 @@ void test_MAP15_height_source_by_phase(void)
     TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_ARMED_GROUND, true));
     TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_GROUND_RECOVER, false));
     TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_TAKEOFF, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_TAKEOFF, false));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_TAKEOFF, false));
     TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_LANDING, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_LANDING, false));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_LANDING, false));
     TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_UNKNOWN, true));
     TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_UNKNOWN, false));
 }
@@ -382,11 +394,13 @@ void test_MAP13_real_view_ground_does_not_release(void)
 {
     fusion_setup();
     const sensor_health_t h[TOF_NUM_SENSORS] = {SENSOR_OK, SENSOR_OK, SENSOR_OK};
-    set_zone(ROW_UP, COL, 1u, 1.0f, 0.0f); /* real, row 1 at 1 m */
+    TEST_ASSERT_FALSE(ground_target_compatible(&g_f.mount[TOF_SENSOR_C], ROW_DOWN, COL, 0.2f, &g_g));
+    TEST_ASSERT_TRUE(ground_target_compatible(&g_f.mount[TOF_SENSOR_C], ROW_DOWN, COL, 1.0f, &g_g));
+    set_zone(ROW_DOWN, COL, 1u, 0.2f, 0.0f); /* real, row 2 at 0.2 m */
     run_steps(1u);
     const uint16_t held = min_export(FUSION_VIEW_REAL);
     TEST_ASSERT_TRUE(held < 65535u);
-    set_zone(ROW_UP, COL, 1u, 2.0f, 0.0f); /* now ground-compatible at 2 m */
+    set_zone(ROW_DOWN, COL, 1u, 1.0f, 0.0f); /* now the ground at 1 m */
     g_fr.t_ready_us = 100000u;
     (void)fusion_push_frame(&g_f, &g_fr, &g_g);
     fusion_run(&g_f, h, 100000u);
@@ -421,6 +435,7 @@ int main(void)
     RUN_TEST(test_MAP14_ground_20cm_bottom_rows_are_ground);
     RUN_TEST(test_MAP14_ground_20cm_top_row_is_obstacle);
     RUN_TEST(test_MAP14_extent_not_centre_ray);
+    RUN_TEST(test_MAP14b_tolerances_by_axis);
     RUN_TEST(test_MAP14_tolerance_threshold);
     RUN_TEST(test_MAP14_pitch_nose_down_15);
     RUN_TEST(test_MAP14_pitch_nose_up_15);

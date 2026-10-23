@@ -1,7 +1,7 @@
 # Параметры модуля
 
 Генерируется из `core/include/core/params_table.h` утилитой `tools/params_md` (`tools/scripts/params_md.sh`); вручную не править.
-Пределы min/max — временные, на ревью человеком (ТЗ 5.6, SW-07a). Версия формата слота: 2.
+Пределы min/max — временные, на ревью человеком (ТЗ 5.6, SW-07a). Версия формата слота: 3.
 Умолчания `LCD_ENABLE` и `LOG_LEVEL` — для сборки DEBUG; `GROUND_POLICY` max = 1 только при `TOF_ALLOW_GROUND_DROP = 1` (MAP-07a).
 
 | # | Имя | Тип | Умолчание | Min | Max |
@@ -42,31 +42,32 @@
 | 33 | `AMBIENT_DEGRADED` | u32 | 0 | 0 | 1000000 |
 | 34 | `ROW_MASK` | u8 | 0xFF | 0x1 | 0xFF |
 | 35 | `CAL_TOL_DEG` | f32 | 2 | 0 | 10 |
-| 36 | `CLEAR_CONFIRM_FRAMES` | u8 | 3 | 1 | 50 |
-| 37 | `DIST_RELAX_FRAMES` | u8 | 2 | 1 | 50 |
-| 38 | `HOLD_MAX_MS` | u16 | 500 | 0 | 5000 |
-| 39 | `FUSION_WINDOW_MS` | u16 | 0 | 0 | 1000 |
-| 40 | `VALID_DATA_MAX_AGE_MS` | u16 | 150 | 10 | 2000 |
-| 41 | `VALID_FRAC_MIN` | f32 | 0.5 | 0 | 1 |
-| 42 | `DEGRADED_TIME_MS` | u16 | 300 | 0 | 10000 |
-| 43 | `GROUND_POLICY` | u8 | 0 | 0 | 0 |
-| 44 | `GROUND_TOL_M` | f32 | 0.15 | 0 | 1 |
-| 45 | `PHASE_H_FLIGHT_M` | f32 | 1.5 | 0.3 | 7 |
-| 46 | `PHASE_H_HYST_M` | f32 | 0.5 | 0 | 3 |
-| 47 | `MIN_DIST_CM` | u16 | 4 | 1 | 600 |
-| 48 | `MAX_DIST_CM` | u16 | 300 | 10 | 600 |
-| 49 | `MAV_DISTANCE_RATE_HZ` | u8 | 10 | 1 | 30 |
-| 50 | `UART_BAUD` | u32 | 115200 | 9600 | 921600 |
-| 51 | `MAV_SYSID` | u8 | 0 | 0 | 255 |
-| 52 | `MAV_COMPID` | u8 | 196 | 1 | 255 |
-| 53 | `FAULT_ACTION` | u8 | 1 | 0 | 2 |
-| 54 | `FAULT_TRIGGER_MASK` | u8 | 0xD | 0x0 | 0x3F |
-| 55 | `FAULT_ON_REBOOT` | u8 | 1 | 0 | 1 |
-| 56 | `FAULT_WALL` | u8 | 0 | 0 | 1 |
-| 57 | `WARN_CM` | u16 | 250 | 10 | 600 |
-| 58 | `CRIT_CM` | u16 | 120 | 10 | 600 |
-| 59 | `WARN_HYST_CM` | u16 | 30 | 0 | 200 |
-| 60 | `LCD_ENABLE` | u8 | 1 | 0 | 1 |
-| 61 | `LCD_RATE_HZ` | u8 | 5 | 1 | 20 |
-| 62 | `NAMED_VALUE_ENABLE` | u8 | 0 | 0 | 1 |
-| 63 | `LOG_LEVEL` | u8 | 1 | 0 | 1 |
+| 36 | `CAL_TOL_EL_DEG` | f32 | 0.5 | 0 | 10 |
+| 37 | `CLEAR_CONFIRM_FRAMES` | u8 | 3 | 1 | 50 |
+| 38 | `DIST_RELAX_FRAMES` | u8 | 2 | 1 | 50 |
+| 39 | `HOLD_MAX_MS` | u16 | 500 | 0 | 5000 |
+| 40 | `FUSION_WINDOW_MS` | u16 | 0 | 0 | 1000 |
+| 41 | `VALID_DATA_MAX_AGE_MS` | u16 | 150 | 10 | 2000 |
+| 42 | `VALID_FRAC_MIN` | f32 | 0.5 | 0 | 1 |
+| 43 | `DEGRADED_TIME_MS` | u16 | 300 | 0 | 10000 |
+| 44 | `GROUND_POLICY` | u8 | 0 | 0 | 0 |
+| 45 | `GROUND_TOL_M` | f32 | 0.15 | 0 | 1 |
+| 46 | `PHASE_H_FLIGHT_M` | f32 | 1.5 | 0.3 | 7 |
+| 47 | `PHASE_H_HYST_M` | f32 | 0.5 | 0 | 3 |
+| 48 | `MIN_DIST_CM` | u16 | 4 | 1 | 600 |
+| 49 | `MAX_DIST_CM` | u16 | 300 | 10 | 600 |
+| 50 | `MAV_DISTANCE_RATE_HZ` | u8 | 10 | 1 | 30 |
+| 51 | `UART_BAUD` | u32 | 115200 | 9600 | 921600 |
+| 52 | `MAV_SYSID` | u8 | 0 | 0 | 255 |
+| 53 | `MAV_COMPID` | u8 | 196 | 1 | 255 |
+| 54 | `FAULT_ACTION` | u8 | 1 | 0 | 2 |
+| 55 | `FAULT_TRIGGER_MASK` | u8 | 0xD | 0x0 | 0x3F |
+| 56 | `FAULT_ON_REBOOT` | u8 | 1 | 0 | 1 |
+| 57 | `FAULT_WALL` | u8 | 0 | 0 | 1 |
+| 58 | `WARN_CM` | u16 | 250 | 10 | 600 |
+| 59 | `CRIT_CM` | u16 | 120 | 10 | 600 |
+| 60 | `WARN_HYST_CM` | u16 | 30 | 0 | 200 |
+| 61 | `LCD_ENABLE` | u8 | 1 | 0 | 1 |
+| 62 | `LCD_RATE_HZ` | u8 | 5 | 1 | 20 |
+| 63 | `NAMED_VALUE_ENABLE` | u8 | 0 | 0 | 1 |
+| 64 | `LOG_LEVEL` | u8 | 1 | 0 | 1 |

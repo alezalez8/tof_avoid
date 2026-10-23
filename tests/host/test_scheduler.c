@@ -440,6 +440,39 @@ void test_MAP17_flight_keep_exports_ground(void)
     TEST_ASSERT_EQUAL_UINT16(65535u, min_od());
 }
 
+/* MAP-15b end to end: in the air without a valid rangefinder for > 500 ms the ground check is off
+ * (every target real), IN_AIR gives FLIGHT; TOF_HEIGHT_GROUND_M is not used. */
+void test_MAP15b_rangefinder_lost_in_air(void)
+{
+    run(10u);
+    g_w.armed = true;
+    g_w.mode = TOF_COPTER_MODE_AUTO;
+    g_w.ls = MAV_LANDED_STATE_TAKEOFF;
+    g_w.zone_c = RAW(3u, 1u);
+    g_w.r_c_mm = 689; /* would be ground at 0.20 m */
+    fc_hb();
+    run(500u);
+    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_s.phase.phase);
+    TEST_ASSERT_EQUAL_UINT8(0u, g_s.core.fusion.frame[TOF_SENSOR_C].n_ground_zones);
+    TEST_ASSERT_TRUE(min_od() < 300u); /* exported as a real obstacle */
+    g_w.ls = MAV_LANDED_STATE_IN_AIR;
+    run(300u);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_s.phase.phase);
+    /* Rangefinder present, then out of range above 7 m for > 500 ms: classification off again. */
+    setUp();
+    to_flight(-0.2618f);
+    g_w.zone_c = RAW(3u, 1u);
+    g_w.r_c_mm = 3030;
+    run(300u);
+    TEST_ASSERT_EQUAL_UINT8(1u, g_s.core.fusion.frame[TOF_SENSOR_C].n_ground_zones);
+    g_w.rf_cm = 800u; /* above max_distance 700 */
+    run(400u);
+    TEST_ASSERT_EQUAL_UINT8(1u, g_s.core.fusion.frame[TOF_SENSOR_C].n_ground_zones);
+    run(300u);
+    TEST_ASSERT_EQUAL_UINT8(0u, g_s.core.fusion.frame[TOF_SENSOR_C].n_ground_zones);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_s.phase.phase);
+}
+
 /* FLT-05 end to end: armed in AUTO on the ground with a fault - no command; FLT-01/FLT-03: in FLIGHT
  * frames stop - stale after > 300 ms and DO_SET_MODE BRAKE on the same pass. */
 void test_FLT03_end_to_end_stale_map(void)
@@ -474,13 +507,13 @@ void test_FLT03_end_to_end_stale_map(void)
     TEST_ASSERT_TRUE(g_wire.set_mode <= 2u);
 }
 
-/* FLT-06 end to end: the FC ignores the command - 5 transmissions, then "TOF HOLD REJECTED". */
+/* FLT-06, FLT-03a end to end: the FC ignores the command - 6 transmissions, then "TOF HOLD REJECTED". */
 void test_FLT06_end_to_end_rejected(void)
 {
     to_flight(0.0f);
     g_w.frames_on = false;
     run(4000u);
-    TEST_ASSERT_EQUAL_UINT32(5u, g_wire.set_mode);
+    TEST_ASSERT_EQUAL_UINT32(6u, g_wire.set_mode);
     TEST_ASSERT_TRUE(text_seen("TOF HOLD REJECTED"));
     TEST_ASSERT_TRUE(text_seen("TOF DATA STALE"));
 }
@@ -648,6 +681,7 @@ int main(void)
     RUN_TEST(test_ICD04_unsupported_on_wire);
     RUN_TEST(test_MAP17_ground_phase_export);
     RUN_TEST(test_MAP17_flight_keep_exports_ground);
+    RUN_TEST(test_MAP15b_rangefinder_lost_in_air);
     RUN_TEST(test_FLT03_end_to_end_stale_map);
     RUN_TEST(test_FLT06_end_to_end_rejected);
     RUN_TEST(test_FLT02_lost_stops_distance);

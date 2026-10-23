@@ -15,7 +15,7 @@
  * detected by the scheduler. */
 
 #define FAULT_RETRY_US 500000u /* repeat every 500 ms */
-#define FAULT_MAX_SENDS 5u     /* at most 5 transmissions of the command per series */
+#define FAULT_MAX_SENDS 6u     /* FLT-03a: first transmission + up to 5 repeats */
 
 typedef struct {
     uint8_t action;       /* FAULT_ACTION: PARAM_FAULT_NONE / BRAKE / LOITER */

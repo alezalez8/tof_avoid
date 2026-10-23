@@ -93,7 +93,11 @@ static void on_distance_sensor(mavrx_t *r, const mavlink_message_t *m, uint32_t 
     /* signal_quality 1 = invalid signal (0 = unknown). */
     r->rf_in_range = d.current_distance >= d.min_distance && d.current_distance <= d.max_distance &&
                      d.max_distance > 0u && d.signal_quality != 1u;
-    r->rf_range_m = (float)d.current_distance / 100.0f;
+    if (r->rf_in_range) {
+        r->rf_valid_seen = true;
+        r->t_rf_valid_us = now_us;
+        r->rf_range_m = (float)d.current_distance / 100.0f;
+    }
 }
 
 /* REQ: ICD-04 */
@@ -260,10 +264,10 @@ bool mavrx_att_at(const mavrx_t *r, uint32_t t_us, uint32_t now_us, float *pitch
     return false; /* older than the buffer */
 }
 
-/* REQ: MAP-15 (DISTANCE_SENSOR > 500 ms: height invalid) */
+/* REQ: MAP-15, MAP-15b (no valid DISTANCE_SENSOR for > 500 ms: height invalid) */
 bool mavrx_rf_valid(const mavrx_t *r, uint32_t now_us, float *range_m)
 {
-    if (!r->rf_seen || !r->rf_in_range || age_us(now_us, r->t_rf_us) > MAVRX_RF_TIMEOUT_US) {
+    if (!r->rf_valid_seen || age_us(now_us, r->t_rf_valid_us) > MAVRX_RF_TIMEOUT_US) {
         return false;
     }
     *range_m = r->rf_range_m;

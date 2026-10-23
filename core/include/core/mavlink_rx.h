@@ -82,8 +82,10 @@ typedef struct {
     /* DISTANCE_SENSOR, orientation 25 */
     bool rf_seen;
     uint32_t t_rf_us;
-    bool rf_in_range;
-    float rf_range_m;
+    bool rf_in_range;    /* the last sample */
+    bool rf_valid_seen;  /* a valid sample was received */
+    uint32_t t_rf_valid_us;
+    float rf_range_m;    /* the last valid sample */
 
     /* COMMAND_ACK from the FC: logged, never a success criterion (FLT-03) */
     bool ack_evt;
@@ -114,7 +116,8 @@ bool mavrx_att_valid(const mavrx_t *r, uint32_t now_us);
  * A t_us newer than the newest sample holds it for up to 200 ms. */
 bool mavrx_att_at(const mavrx_t *r, uint32_t t_us, uint32_t now_us, float *pitch_rad, float *roll_rad);
 
-/* Rangefinder distance (m) if received within 500 ms and inside its own min/max. */
+/* Rangefinder distance (m) of the last valid sample (inside its own min/max, signal not invalid) if
+ * that sample is not older than 500 ms (MAP-15b: invalid for longer than 500 ms). */
 bool mavrx_rf_valid(const mavrx_t *r, uint32_t now_us, float *range_m);
 
 /* Takes one pending ICD-04 refusal; false if none. */

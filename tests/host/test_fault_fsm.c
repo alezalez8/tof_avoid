@@ -143,9 +143,9 @@ void test_FLT05_command_when_phase_allows(void)
     TEST_ASSERT_TRUE(g_out.send);
 }
 
-/* FLT-03: repeat every 500 ms, at most 5 transmissions; FLT-06: HOLD REJECTED 500 ms after the
- * last one without a mode change; no commands afterwards. */
-void test_FLT03_retry_500ms_x5_then_rejected(void)
+/* FLT-03, FLT-03a: first transmission and up to 5 repeats every 500 ms (6 in total); FLT-06: HOLD
+ * REJECTED 500 ms after the last one without a mode change; no commands afterwards. */
+void test_FLT03a_retry_500ms_x5_then_rejected(void)
 {
     upd(F_FAILED, 0u);
     TEST_ASSERT_EQUAL_UINT32(1u, g_sends);
@@ -157,7 +157,7 @@ void test_FLT03_retry_500ms_x5_then_rejected(void)
         TEST_ASSERT_EQUAL_UINT8(n, g_out.confirmation);
         g_fc.hb_count++; /* heartbeats keep coming, mode stays AUTO */
     }
-    TEST_ASSERT_EQUAL_UINT32(5u, g_sends);
+    TEST_ASSERT_EQUAL_UINT32(6u, g_sends);
     upd(F_FAILED, 499u);
     TEST_ASSERT_EQUAL_UINT8(0u, g_out.events & FAULT_EVT_HOLD_REJECTED);
     upd(F_FAILED, 1u);
@@ -166,7 +166,7 @@ void test_FLT03_retry_500ms_x5_then_rejected(void)
     for (int i = 0; i < 50; i++) {
         upd(F_FAILED, 100u);
     }
-    TEST_ASSERT_EQUAL_UINT32(5u, g_sends);
+    TEST_ASSERT_EQUAL_UINT32(6u, g_sends);
 }
 
 /* FLT-03: success only by the mode in a HEARTBEAT received after the command. A mode field that
@@ -402,7 +402,7 @@ int main(void)
     RUN_TEST(test_FLT05_no_command_on_ground_disarmed_manual);
     RUN_TEST(test_FLT03_class_outside_mask);
     RUN_TEST(test_FLT05_command_when_phase_allows);
-    RUN_TEST(test_FLT03_retry_500ms_x5_then_rejected);
+    RUN_TEST(test_FLT03a_retry_500ms_x5_then_rejected);
     RUN_TEST(test_FLT03_success_only_by_heartbeat);
     RUN_TEST(test_FLT04_one_transfer_per_episode_pilot_resumes);
     RUN_TEST(test_FLT04_episode_spans_class_changes);

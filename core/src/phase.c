@@ -24,16 +24,16 @@ static bool is_air(phase_t ph)
     return ph == PHASE_TAKEOFF || ph == PHASE_FLIGHT || ph == PHASE_LANDING;
 }
 
-/* IN_AIR below FLIGHT: TAKEOFF until h_tof >= PHASE_H_FLIGHT_M has held for 1 s (table 5.4); any
- * sample below the threshold restarts the confirmation. PHASE_H_HYST_M is the mission takeoff margin of
- * 5.4, not a band of this automaton (DEV-12). */
-/* REQ: MAP-16 */
-static phase_t in_air(phase_fsm_t *f, const phase_cfg_t *cfg, float h_m, bool was_flight, uint32_t now_us)
+/* IN_AIR before FLIGHT: TAKEOFF until h_tof >= PHASE_H_FLIGHT_M has held for 1 s; any sample below
+ * the threshold restarts the confirmation (MAP-16a: no height hysteresis; PHASE_H_HYST_M is only the
+ * operating rule of section 16). Without a valid height: FLIGHT at once (MAP-15b). */
+/* REQ: MAP-16, MAP-16a, MAP-15b */
+static phase_t in_air(phase_fsm_t *f, const phase_cfg_t *cfg, const phase_input_t *in, uint32_t now_us)
 {
-    if (was_flight) {
-        return PHASE_FLIGHT; /* stays FLIGHT while LS = IN_AIR */
+    if (!in->h_valid) {
+        return PHASE_FLIGHT;
     }
-    if (h_m >= cfg->h_flight_m) {
+    if (in->h_m >= cfg->h_flight_m) {
         if (!f->h_timer_on) {
             f->h_timer_on = true;
             f->t_h_since_us = now_us;
@@ -48,10 +48,13 @@ static phase_t in_air(phase_fsm_t *f, const phase_cfg_t *cfg, float h_m, bool wa
 }
 
 /* Phase from fresh FC data, before the GROUND_RECOVER step. */
-/* REQ: MAP-16 */
+/* REQ: MAP-16, MAP-16a */
 static phase_t next_known(phase_fsm_t *f, const phase_cfg_t *cfg, const phase_input_t *in, bool was_flight,
                           uint32_t now_us)
 {
+    if (was_flight && (in->landed_state == PHASE_LS_IN_AIR || in->landed_state == PHASE_LS_TAKEOFF)) {
+        return PHASE_FLIGHT; /* MAP-16a: FLIGHT is left only on LS = LANDING / ON_GROUND or PHASE_UNKNOWN */
+    }
     if (!in->armed) {
         return PHASE_GROUND;
     }
@@ -63,7 +66,7 @@ static phase_t next_known(phase_fsm_t *f, const phase_cfg_t *cfg, const phase_in
     case PHASE_LS_LANDING:
         return PHASE_LANDING;
     case PHASE_LS_IN_AIR:
-        return in_air(f, cfg, in->h_m, was_flight, now_us);
+        return in_air(f, cfg, in, now_us);
     default:
         return PHASE_UNKNOWN; /* LS undefined */
     }
@@ -77,10 +80,9 @@ uint8_t phase_update(phase_fsm_t *f, const phase_cfg_t *cfg, const phase_input_t
     if (!in->hb_valid || !in->ess_valid) {
         next = PHASE_UNKNOWN;
     } else {
-        /* Data back after a gap while still in the air: FLIGHT is kept (the more conservative KEEP
-         * policy), no new 1 s confirmation. */
-        const bool was_flight =
-            prev == PHASE_FLIGHT || (prev == PHASE_UNKNOWN && f->last_known == PHASE_FLIGHT);
+        /* MAP-16a: PHASE_UNKNOWN leaves FLIGHT; coming back, FLIGHT is entered again only by the entry
+         * rule (1 s at PHASE_H_FLIGHT_M, or no valid height - MAP-15b). */
+        const bool was_flight = prev == PHASE_FLIGHT;
         next = next_known(f, cfg, in, was_flight, now_us);
         if (!is_air(next) && next != PHASE_UNKNOWN && f->airborne && prev != PHASE_GROUND_RECOVER) {
             next = PHASE_GROUND_RECOVER; /* LS = ON_GROUND (or disarm) after a flight */

@@ -19,16 +19,19 @@ typedef struct {
     float roll_rad;
     float h_body_m;    /* body-centre height (MAP-14a) */
     float tol_m;       /* GROUND_TOL_M */
-    float cal_tol_deg; /* CAL_TOL_DEG */
+    float cal_tol_deg;    /* CAL_TOL_DEG: azimuth tolerance */
+    float cal_tol_el_deg; /* CAL_TOL_EL_DEG: elevation tolerance (MAP-14b) */
 } ground_ctx_t;
 
-/* MAP-14, MAP-14a: lowest point height h_p = h_body - z_L(p_B) over every direction inside the
- * angular extent of zone (i, j) widened by CAL_TOL_DEG, at range r_m (p_B with t_m). Exact maximum
- * of z_L over the alpha/beta box, not a sampling. */
+/* MAP-14, MAP-14a, MAP-14b: lowest point height h_p = h_body - z_L(p_B) over every direction inside
+ * the angular extent of zone (i, j) widened by CAL_TOL_DEG in azimuth and CAL_TOL_EL_DEG in elevation,
+ * at range r_m (p_B with t_m). Exact maximum of z_L over the alpha/beta box, not a sampling. A zone
+ * whose upper edge reaches the horizon is ground-compatible at any range beyond the touch point: a
+ * limitation of the model (MAP-19), not a defect. */
 float ground_min_height(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, const ground_ctx_t *g);
 
 /* MAP-14: a target at range r_m is compatible with the ground if some direction of the zone extent
- * (+CAL_TOL_DEG) gives h_p <= GROUND_TOL_M. False when g is NULL or not valid. */
+ * (+tolerances, MAP-14b) gives h_p <= GROUND_TOL_M. False when g is NULL or not valid. */
 bool ground_target_compatible(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, const ground_ctx_t *g);
 
 typedef enum {
@@ -37,8 +40,9 @@ typedef enum {
     GROUND_H_PARAM         /* TOF_HEIGHT_GROUND_M with MOUNT_XYZ_M */
 } ground_h_src_t;
 
-/* MAP-15: FLIGHT - rangefinder; GROUND, ARMED_GROUND, GROUND_RECOVER - parameter; TAKEOFF, LANDING -
- * rangefinder if valid, else parameter; PHASE_UNKNOWN - rangefinder if valid, else none. */
+/* MAP-15, MAP-15b: GROUND, ARMED_GROUND, GROUND_RECOVER - parameter; TAKEOFF, FLIGHT, LANDING,
+ * PHASE_UNKNOWN - rangefinder if valid (within 500 ms), else none: classification off, every target real.
+ * TOF_HEIGHT_GROUND_M is never used in the air. */
 ground_h_src_t ground_height_source(phase_t ph, bool rf_valid);
 
 typedef struct {

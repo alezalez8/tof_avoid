@@ -58,7 +58,8 @@ X(AMBIENT_DEGRADED,      U32, PV_U(0u),     PV_U(0u),    PV_U(1000000u)) /* MAP-
 
 /* Map (MAP-04, MAP-05, MAP-09, MAP-10, MAP-13) */
 X(ROW_MASK,              U8,  PV_U(0xFFu),  PV_U(1u),    PV_U(0xFFu))   /* bit i = row i, i = 0 top */
-X(CAL_TOL_DEG,           F32, PV_F(2.0f),   PV_F(0.0f),  PV_F(10.0f))
+X(CAL_TOL_DEG,           F32, PV_F(2.0f),   PV_F(0.0f),  PV_F(10.0f))    /* azimuth only (MAP-14b) */
+X(CAL_TOL_EL_DEG,        F32, PV_F(0.5f),   PV_F(0.0f),  PV_F(10.0f))    /* MAP-14b: elevation, ground check */
 X(CLEAR_CONFIRM_FRAMES,  U8,  PV_U(3u),     PV_U(1u),    PV_U(50u))
 X(DIST_RELAX_FRAMES,     U8,  PV_U(2u),     PV_U(1u),    PV_U(50u))
 X(HOLD_MAX_MS,           U16, PV_U(500u),   PV_U(0u),    PV_U(5000u))

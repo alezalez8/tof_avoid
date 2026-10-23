@@ -53,13 +53,14 @@ static void fill_rf(sched_t *s, uint32_t now_us)
     s->hin.rf_valid = mavrx_rf_valid(&s->rx, now_us, &s->hin.rf_range_m);
 }
 
-/* REQ: MAP-14, MAP-14a, MAP-15 (ground context of a frame) */
+/* REQ: MAP-14, MAP-14a, MAP-14b, MAP-15, MAP-15b (ground context of a frame) */
 tof_push_status_t sched_push_frame(sched_t *s, const tof_frame_t *frame, uint32_t now_us)
 {
     ground_ctx_t g;
     memset(&g, 0, sizeof g);
     g.tol_m = params_get_f32(&s->params, PARAM_GROUND_TOL_M);
     g.cal_tol_deg = params_get_f32(&s->params, PARAM_CAL_TOL_DEG);
+    g.cal_tol_el_deg = params_get_f32(&s->params, PARAM_CAL_TOL_EL_DEG);
     if (frame->sensor_id < TOF_NUM_SENSORS &&
         mavrx_att_at(&s->rx, frame->t_ready_us, now_us, &g.pitch_rad, &g.roll_rad)) {
         fill_rf(s, now_us);
@@ -183,8 +184,8 @@ static void handle_rx(sched_t *s, uint32_t now_us)
     }
 }
 
-/* Body height for the phase automaton (MAP-15 TAKEOFF rule: rangefinder, else the parameter). */
-static float phase_height(sched_t *s, uint32_t now_us)
+/* Body height for the phase automaton: rangefinder only (MAP-15b); false if not valid. */
+static bool phase_height(sched_t *s, uint32_t now_us, float *h)
 {
     float pitch = 0.0f;
     float roll = 0.0f;
@@ -192,9 +193,8 @@ static float phase_height(sched_t *s, uint32_t now_us)
         pitch = 0.0f;
         roll = 0.0f;
     }
-    float h = 0.0f;
-    (void)ground_body_height(PHASE_TAKEOFF, &s->hin, &s->core.fusion.mount[TOF_SENSOR_C], pitch, roll, &h);
-    return h;
+    return ground_body_height(PHASE_FLIGHT, &s->hin, &s->core.fusion.mount[TOF_SENSOR_C], pitch, roll, h) ==
+           GROUND_H_RANGEFINDER;
 }
 
 /* REQ: MAP-16, MAP-17 (GROUND_RECOVER reset) */
@@ -205,7 +205,8 @@ static void update_phase(sched_t *s, uint32_t now_us)
     in.armed = s->rx.armed;
     in.ess_valid = mavrx_ess_valid(&s->rx, now_us);
     in.landed_state = s->rx.landed_state;
-    in.h_m = phase_height(s, now_us);
+    in.h_m = 0.0f;
+    in.h_valid = phase_height(s, now_us, &in.h_m);
     const phase_t prev = s->phase.phase;
     const uint8_t evt = phase_update(&s->phase, &s->phase_cfg, &in, now_us);
     if ((evt & PHASE_EVT_RESET) != 0u) {

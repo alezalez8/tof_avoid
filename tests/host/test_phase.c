@@ -20,6 +20,7 @@ void setUp(void)
     g_in.hb_valid = true;
     g_in.ess_valid = true;
     g_in.landed_state = PHASE_LS_ON_GROUND;
+    g_in.h_valid = true;
     g_in.h_m = 0.2f;
     g_t = 0u;
 }
@@ -118,8 +119,8 @@ void test_MAP16_takeoff_to_flight_after_1s(void)
     TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
 }
 
-/* MAP-16: "h_tof >= PHASE_H_FLIGHT_M during 1 s" - any dip below the threshold restarts the
- * confirmation (no band, DEV-12). */
+/* MAP-16a: "h_tof >= PHASE_H_FLIGHT_M during 1 s" - any dip below the threshold restarts the
+ * confirmation (no height hysteresis). */
 void test_MAP16_flight_confirmation_restarts_on_dip(void)
 {
     g_in.armed = true;
@@ -164,15 +165,50 @@ void test_MAP16_landing_and_ground_recover(void)
     TEST_ASSERT_EQUAL_INT(PHASE_GROUND, g_f.phase);
 }
 
-/* MAP-16: disarm in the air also goes through GROUND_RECOVER. */
-void test_MAP16_disarm_after_flight_recovers(void)
+/* MAP-16a: FLIGHT is not left on disarm while LS = IN_AIR; LS = ON_GROUND then recovers to GROUND. */
+void test_MAP16a_disarm_in_flight_stays_until_on_ground(void)
 {
     to_flight();
     g_in.armed = false;
+    TEST_ASSERT_EQUAL_UINT8(PHASE_EVT_NONE, step(10u));
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
+    g_in.landed_state = PHASE_LS_ON_GROUND;
     TEST_ASSERT_EQUAL_UINT8(PHASE_EVT_CHANGED | PHASE_EVT_RESET, step(10u));
     TEST_ASSERT_EQUAL_INT(PHASE_GROUND_RECOVER, g_f.phase);
     (void)step(10u);
     TEST_ASSERT_EQUAL_INT(PHASE_GROUND, g_f.phase);
+}
+
+/* MAP-15b: IN_AIR without a valid height - FLIGHT at once; LS = TAKEOFF stays TAKEOFF. */
+void test_MAP15b_in_air_without_height_is_flight(void)
+{
+    g_in.armed = true;
+    (void)step(10u);
+    g_in.landed_state = PHASE_LS_TAKEOFF;
+    g_in.h_valid = false;
+    (void)step(10u);
+    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_f.phase);
+    g_in.landed_state = PHASE_LS_IN_AIR;
+    TEST_ASSERT_EQUAL_UINT8(PHASE_EVT_CHANGED, step(10u));
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
+    /* The height coming back does not leave FLIGHT. */
+    g_in.h_valid = true;
+    g_in.h_m = 0.5f;
+    (void)step(10u);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
+}
+
+/* MAP-15b: the height lost during the TAKEOFF confirmation - FLIGHT. */
+void test_MAP15b_height_lost_during_takeoff(void)
+{
+    g_in.armed = true;
+    (void)step(10u);
+    fly(1.0f);
+    (void)step(10u);
+    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_f.phase);
+    g_in.h_valid = false;
+    (void)step(10u);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
 }
 
 /* MAP-16: TAKEOFF aborted (LS back to ON_GROUND) also recovers. */
@@ -209,15 +245,24 @@ void test_MAP16_unknown_on_timeouts(void)
     TEST_ASSERT_EQUAL_INT(PHASE_UNKNOWN, g_f.phase);
 }
 
-/* MAP-16: back from PHASE_UNKNOWN in the air after FLIGHT -> FLIGHT at once (KEEP kept). */
-void test_MAP16_unknown_back_to_flight(void)
+/* MAP-16a: back from PHASE_UNKNOWN in the air after FLIGHT - FLIGHT only by the entry rule: 1 s at
+ * PHASE_H_FLIGHT_M, or at once without a valid height (MAP-15b). */
+void test_MAP16a_unknown_back_after_flight(void)
 {
     to_flight();
     g_in.ess_valid = false;
     (void)step(10u);
     g_in.ess_valid = true;
-    g_in.h_m = 0.5f;
-    TEST_ASSERT_EQUAL_UINT8(PHASE_EVT_CHANGED, step(10u));
+    g_in.h_m = 2.0f;
+    (void)step(10u);
+    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_f.phase);
+    (void)step(1000u);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
+    g_in.hb_valid = false;
+    (void)step(10u);
+    g_in.hb_valid = true;
+    g_in.h_valid = false;
+    (void)step(10u);
     TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
 }
 
@@ -264,13 +309,13 @@ void test_MAP16_landing_go_around(void)
     TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
 }
 
-/* MAP-16: FLIGHT is left if LS is not IN_AIR (LS = TAKEOFF -> TAKEOFF). */
-void test_MAP16_flight_to_takeoff_on_ls_takeoff(void)
+/* MAP-16a: FLIGHT is left only on LS = LANDING / ON_GROUND or PHASE_UNKNOWN - LS = TAKEOFF keeps it. */
+void test_MAP16a_flight_kept_on_ls_takeoff(void)
 {
     to_flight();
     g_in.landed_state = PHASE_LS_TAKEOFF;
     (void)step(10u);
-    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_f.phase);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_f.phase);
 }
 
 /* MAP-17 table 5.4, column "GROUND_SUSPECT points": 65535 (false) or as an obstacle (true). */
@@ -331,14 +376,16 @@ int main(void)
     RUN_TEST(test_MAP16_flight_confirmation_restarts_on_dip);
     RUN_TEST(test_MAP16_flight_sticky_while_in_air);
     RUN_TEST(test_MAP16_landing_and_ground_recover);
-    RUN_TEST(test_MAP16_disarm_after_flight_recovers);
+    RUN_TEST(test_MAP16a_disarm_in_flight_stays_until_on_ground);
+    RUN_TEST(test_MAP15b_in_air_without_height_is_flight);
+    RUN_TEST(test_MAP15b_height_lost_during_takeoff);
     RUN_TEST(test_MAP16_takeoff_aborted_recovers);
     RUN_TEST(test_MAP16_unknown_on_timeouts);
-    RUN_TEST(test_MAP16_unknown_back_to_flight);
+    RUN_TEST(test_MAP16a_unknown_back_after_flight);
     RUN_TEST(test_MAP16_unknown_back_to_takeoff);
     RUN_TEST(test_MAP16_unknown_after_flight_ends_on_ground);
     RUN_TEST(test_MAP16_landing_go_around);
-    RUN_TEST(test_MAP16_flight_to_takeoff_on_ls_takeoff);
+    RUN_TEST(test_MAP16a_flight_kept_on_ls_takeoff);
     RUN_TEST(test_MAP17_export_policy_table);
     RUN_TEST(test_MAP07a_drop_inactive_without_build_flag);
     RUN_TEST(test_MAP17_hold_allowed_table);

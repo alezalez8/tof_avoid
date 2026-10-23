@@ -41,7 +41,8 @@ typedef struct {
     bool armed;
     bool ess_valid; /* EXTENDED_SYS_STATE received within 3 s */
     uint8_t landed_state;
-    float h_m; /* h_tof by MAP-15 for the current phase (rangefinder, or the ground parameter) */
+    bool h_valid; /* rangefinder height valid within 500 ms (MAP-15b) */
+    float h_m;    /* body height from the rangefinder (MAP-15, MAP-14a) */
 } phase_input_t;
 
 typedef struct {

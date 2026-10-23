@@ -359,6 +359,8 @@ void test_MAP15_rangefinder(void)
     feed_rf(FC_SYS, 150u, 0u, 100u, 0u); /* forward-facing: ignored */
     TEST_ASSERT_FALSE(mavrx_rf_valid(&g_rx, 0u, &h));
     feed_rf(FC_SYS, 150u, MAVRX_RF_ORIENTATION, 0u, 0u);
+    /* MAP-15b: an out-of-range sample does not invalidate the height before 500 ms without a valid one. */
+    feed_rf(FC_SYS, 800u, MAVRX_RF_ORIENTATION, 100u, 100u * MS);
     TEST_ASSERT_TRUE(mavrx_rf_valid(&g_rx, 500u * MS, &h));
     TEST_ASSERT_FLOAT_WITHIN(1e-6f, 1.5f, h);
     TEST_ASSERT_FALSE(mavrx_rf_valid(&g_rx, 500u * MS + 1u, &h));
