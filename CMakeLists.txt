@@ -63,6 +63,11 @@ if(TOF_BUILD_TESTS)
     add_subdirectory(tests/host)
 endif()
 
+# Software-in-the-loop module for SITL (E3): Linux host only.
+if(NOT CMAKE_CROSSCOMPILING AND CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
+    add_subdirectory(tools/emulator/tof_sil)
+endif()
+
 if(CMAKE_CROSSCOMPILING)
     get_filename_component(_tof_tool_dir "${CMAKE_C_COMPILER}" DIRECTORY)
     find_program(TOF_ARM_SIZE arm-none-eabi-size HINTS "${_tof_tool_dir}" REQUIRED)
