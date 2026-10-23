@@ -42,7 +42,7 @@ typedef struct {
     bool reinit_unconfirmed; /* reinit reported OK, no frame yet */
     uint32_t t_last_frame_us;
     uint32_t t_reinit_us;    /* start of the current reinit / last retry in FAILED */
-    bool low_active;         /* valid fraction below VALID_FRAC_MIN (or no data) */
+    bool low_active;         /* valid fraction low, ambient high, or no data (MAP-10, MAP-10a) */
     uint32_t t_low_since_us;
     uint32_t reinit_total;   /* statistics */
 } sh_t;
@@ -52,8 +52,10 @@ void sh_cfg_from_params(sh_cfg_t *cfg, const params_t *p);
 /* Starts supervision at now_us (ranging just started: the first frame is due within 3 periods). */
 void sh_init(sh_t *s, uint32_t now_us);
 
-/* A frame arrived; valid_frac is the share of valid zones (MAP-10, DEV-03). */
-void sh_on_frame(sh_t *s, const sh_cfg_t *cfg, float valid_frac, uint32_t now_us);
+/* A frame arrived; valid_frac is the share of valid zones among zones with a target and
+ * ambient_high is "median ambient above AMBIENT_DEGRADED" (MAP-10a). Either condition held for
+ * longer than DEGRADED_TIME_MS gives DEGRADED. */
+void sh_on_frame(sh_t *s, const sh_cfg_t *cfg, float valid_frac, bool ambient_high, uint32_t now_us);
 
 /* The driver reported an error (SPI timeout, bad data) for this sensor. */
 void sh_on_error(sh_t *s, uint32_t now_us);

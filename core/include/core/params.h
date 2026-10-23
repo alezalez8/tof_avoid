@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "core/config.h"
+
 /* Module parameters (SW-07): one table (name, type, default, min, max) and A/B slot storage. */
 
 typedef enum {
@@ -94,7 +96,7 @@ params_status_t params_validate(const params_t *p);
 
 /* ---- A/B slot storage ---- */
 
-#define PARAMS_FORMAT_VERSION 1u
+#define PARAMS_FORMAT_VERSION 2u /* 2: ORIENT_CONFIRMED, AMBIENT_DEGRADED (TZ 5.6) */
 #define PARAMS_MAGIC 0x50464F54u /* "TOFP" little-endian */
 #define PARAMS_HEADER_SIZE 24u
 #define PARAMS_IMAGE_SIZE (PARAMS_HEADER_SIZE + 4u * (uint32_t)PARAM_COUNT)

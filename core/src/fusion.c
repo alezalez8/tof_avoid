@@ -37,23 +37,26 @@ static bool sector_hit(float lo, float hi, float tol, uint8_t k)
     return fabsf(delta) < 0.5f * TOF_SECTOR_DEG + half;
 }
 
-/* REQ: MAP-05, MAP-04 (ROW_MASK), MAP-09 (window) */
+/* REQ: MAP-05, MAP-04 (ROW_MASK), MAP-09, MAP-09a, SNS-12a */
 void fusion_init(fusion_t *f, const params_t *p)
 {
     memset(f, 0, sizeof *f);
     f->res = (uint8_t)params_get_u32(p, PARAM_SENSOR_RES);
     quality_cfg_from_params(&f->qcfg, p);
     cell_cfg_from_params(&f->ccfg, p);
+    f->staggered = params_get_u32(p, PARAM_SCHEDULE) == PARAM_SCHEDULE_STAGGERED;
+    f->orient_confirmed = params_get_u32(p, PARAM_ORIENT_CONFIRMED) != 0u;
     f->min_cm = (uint16_t)params_get_u32(p, PARAM_MIN_DIST_CM);
     f->max_cm = (uint16_t)params_get_u32(p, PARAM_MAX_DIST_CM);
     f->ambient_clear_max = params_get_u32(p, PARAM_AMBIENT_CLEAR_MAX);
+    f->ambient_degraded = params_get_u32(p, PARAM_AMBIENT_DEGRADED);
     const uint32_t win_ms = params_get_u32(p, PARAM_FUSION_WINDOW_MS);
-    /* 0 = start value of section 15: 1.5 frame periods (DEV-08). */
+    /* 0 = start value of section 15: 1.5 frame periods. */
     f->window_us = (win_ms > 0u) ? win_ms * 1000u : 1500000u / params_get_u32(p, PARAM_SENSOR_FREQ_HZ);
     f->max_age_us = params_get_u32(p, PARAM_VALID_DATA_MAX_AGE_MS) * 1000u;
+    f->cal_tol_deg = params_get_f32(p, PARAM_CAL_TOL_DEG);
 
     const uint32_t row_mask = params_get_u32(p, PARAM_ROW_MASK);
-    const float tol = params_get_f32(p, PARAM_CAL_TOL_DEG);
     const uint8_t nz = (uint8_t)(f->res * f->res);
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
         const geo_vec3_t t = {params_get_f32(p, k_x[s]), params_get_f32(p, k_y[s]),
@@ -65,6 +68,8 @@ void fusion_init(fusion_t *f, const params_t *p)
             uint8_t i = 0u;
             uint8_t j = 0u;
             geo_zone_from_raw(&f->mount[s], z, &i, &j);
+            f->zone_i[s][z] = i;
+            f->zone_j[s][z] = j;
             f->ray_b[s][z] = geo_mat_apply(
                 f->mount[s].r_bs,
                 geo_dir_sensor(geo_zone_alpha_deg(f->res, j), geo_zone_beta_deg(f->res, i)));
@@ -72,13 +77,11 @@ void fusion_init(fusion_t *f, const params_t *p)
             if (((row_mask >> i) & 1u) == 0u) {
                 continue; /* MAP-04: masked rows do not enter the map */
             }
+            f->row_ok[s] |= (uint64_t)1u << z;
             const geo_zone_extent_t e = f->extent[s][z];
             for (uint8_t k = 0; k < TOF_NUM_SECTORS; k++) {
-                if (sector_hit(e.az_min_deg, e.az_max_deg, tol, k)) {
+                if (sector_hit(e.az_min_deg, e.az_max_deg, f->cal_tol_deg, k)) {
                     f->sector_zones[k][s] |= (uint64_t)1u << z;
-                }
-                if (sector_hit(e.az_min_deg, e.az_max_deg, 0.0f, k)) {
-                    f->sector_core[k][s] |= (uint64_t)1u << z;
                 }
             }
         }
@@ -89,28 +92,50 @@ void fusion_init(fusion_t *f, const params_t *p)
         }
         cell_init(&f->cell[k]);
     }
-    f->state = MAP_OK;
+    f->state = f->orient_confirmed ? MAP_OK : MAP_DEGRADED;
 }
 
-/* REQ: MAP-03, MAP-04, MAP-13 (zone candidate: OCC / CLR / INV) */
-static void classify_zone(const fusion_t *f, uint8_t s, uint8_t z, const tof_zone_t *zone,
-                          fusion_zone_t *out, bool *zone_valid)
+/* REQ: MAP-05a. A valid obstacle target at range r: its zone extent is recomputed in azimuths from
+ * the body centre at that range (with t_m) and it is entered into every in-FoV sector it hits. */
+static void mark_target(const fusion_t *f, uint8_t s, uint8_t z, float r, uint16_t d_cm,
+                        fusion_frame_t *ff)
 {
-    quality_zone_t q;
-    quality_zone_eval(&f->qcfg, zone, &q);
-    *zone_valid = q.zone_valid;
+    geo_zone_extent_t e;
+    geo_zone_extent_at_range(&f->mount[s], f->zone_i[s][z], f->zone_j[s][z], r, &e);
+    for (uint8_t k = 0; k < TOF_NUM_SECTORS; k++) {
+        if (!f->in_fov[k] || !sector_hit(e.az_min_deg, e.az_max_deg, f->cal_tol_deg, k)) {
+            continue;
+        }
+        fusion_sec_occ_t *o = &ff->sec_occ[k];
+        if (!o->hit || d_cm < o->dist_cm) {
+            o->hit = true;
+            o->dist_cm = d_cm;
+            o->zone = z;
+            o->angle_ok = sector_hit(e.az_min_deg, e.az_max_deg, 0.0f, k);
+        }
+    }
+}
+
+/* REQ: MAP-03, MAP-04, MAP-05a, MAP-13, MAP-13a (zone candidate: OCC / CLR / INV) */
+static void classify_zone(const fusion_t *f, uint8_t s, uint8_t z, const tof_zone_t *zone,
+                          fusion_frame_t *ff, quality_zone_t *q)
+{
+    quality_zone_eval(&f->qcfg, zone, q);
+    fusion_zone_t *out = &ff->zone[z];
+    const bool in_map = ((f->row_ok[s] >> z) & 1u) != 0u;
 
     bool found = false;
     bool too_close = false;
     uint16_t best = 0u;
-    for (uint8_t k = 0; k < q.n_targets; k++) {
-        if (((q.valid_mask >> k) & 1u) == 0u) {
+    for (uint8_t k = 0; k < q->n_targets; k++) {
+        if (((q->valid_mask >> k) & 1u) == 0u) {
             continue;
         }
         if (zone->target[k].distance_mm <= 0) {
             too_close = true;
             continue;
         }
+        /* MAP-05a: the point is built in the body frame with MOUNT_XYZ_M. */
         const float r = (float)zone->target[k].distance_mm / 1000.0f;
         const geo_vec3_t u = f->ray_b[s][z];
         const geo_vec3_t t = f->mount[s].t_m;
@@ -119,42 +144,74 @@ static void classify_zone(const fusion_t *f, uint8_t s, uint8_t z, const tof_zon
         const uint16_t d_cm = (d >= 65535.0f) ? 65535u : (uint16_t)d; /* floor: nearer */
         if (d_cm < f->min_cm) {
             too_close = true;
-        } else if (d_cm <= f->max_cm && (!found || d_cm < best)) {
-            found = true;
-            best = d_cm;
+        } else if (d_cm <= f->max_cm) {
+            if (!found || d_cm < best) {
+                found = true;
+                best = d_cm;
+            }
+            if (in_map) {
+                mark_target(f, s, z, r, d_cm, ff);
+            }
         }
     }
     out->dist_cm = best;
+    const bool all_valid_beyond = (q->n_valid == q->n_targets) && !too_close;
     if (found) {
         out->cls = ZONE_OCC;
-    } else if ((!f->ccfg.clear_enabled || zone->ambient_per_spad <= f->ambient_clear_max) &&
-               q.n_valid == q.n_targets && !too_close) {
-        /* 5.3 CLR: every reported target valid and beyond max_distance. The ambient limit applies
-         * only when CLEAR_MEASURED is enabled; when it is off, CLR releases to UNKNOWN (DEV-02). */
-        out->cls = ZONE_CLR;
+    } else if (f->ccfg.clear_enabled) {
+        /* MAP-13a: CLEAR_MEASURED on - CLR only with ambient <= AMBIENT_CLEAR_MAX. */
+        out->cls = (all_valid_beyond && zone->ambient_per_spad <= f->ambient_clear_max) ? ZONE_CLR
+                                                                                       : ZONE_INV;
     } else {
-        out->cls = ZONE_INV;
+        /* MAP-13a: CLEAR_MEASURED off - CLR only from a valid target beyond max_distance;
+         * a zone without a target is INV. */
+        out->cls = (q->has_target && all_valid_beyond) ? ZONE_CLR : ZONE_INV;
     }
 }
 
-/* REQ: SNS-09, MAP-03, MAP-10 (valid fraction) */
+/* Median of ambient_per_spad over the zones of a frame (MAP-10a). */
+static uint32_t ambient_median(const tof_frame_t *frame, uint8_t nz)
+{
+    uint32_t v[TOF_MAX_ZONES];
+    for (uint8_t z = 0; z < nz; z++) {
+        /* insertion sort, at most 64 values */
+        const uint32_t a = frame->zone[z].ambient_per_spad;
+        uint8_t k = z;
+        while (k > 0u && v[k - 1u] > a) {
+            v[k] = v[k - 1u];
+            k--;
+        }
+        v[k] = a;
+    }
+    return v[nz / 2u];
+}
+
+/* REQ: SNS-09, MAP-03, MAP-10a (valid fraction, ambient median) */
 bool fusion_push_frame(fusion_t *f, const tof_frame_t *frame)
 {
     if (frame->sensor_id >= TOF_NUM_SENSORS || frame->res != f->res) {
         return false;
     }
-    fusion_frame_t *ff = &f->frame[frame->sensor_id];
+    const uint8_t s = frame->sensor_id;
+    fusion_frame_t *ff = &f->frame[s];
     const uint8_t nz = (uint8_t)(f->res * f->res);
+    memset(ff->sec_occ, 0, sizeof ff->sec_occ);
+    uint8_t n_with = 0u;
     uint8_t n_valid = 0u;
     for (uint8_t z = 0; z < nz; z++) {
-        bool zv = false;
-        classify_zone(f, frame->sensor_id, z, &frame->zone[z], &ff->zone[z], &zv);
-        n_valid = (uint8_t)(n_valid + (zv ? 1u : 0u));
+        quality_zone_t q;
+        classify_zone(f, s, z, &frame->zone[z], ff, &q);
+        n_with = (uint8_t)(n_with + (q.has_target ? 1u : 0u));
+        n_valid = (uint8_t)(n_valid + (q.zone_valid ? 1u : 0u));
     }
+    ff->has_data = true;
     ff->fresh = true;
     ff->t_us = frame->t_ready_us;
     ff->frame_no = frame->frame_no;
-    ff->valid_frac = (float)n_valid / (float)nz;
+    /* MAP-10a: zones without a target are not counted. */
+    ff->valid_frac = (n_with > 0u) ? (float)n_valid / (float)n_with : 1.0f;
+    ff->ambient_median = ambient_median(frame, nz);
+    ff->ambient_high = f->ambient_degraded > 0u && ff->ambient_median > f->ambient_degraded;
     return true;
 }
 
@@ -189,8 +246,15 @@ map_state_t fusion_map_state(const sensor_health_t health[TOF_NUM_SENSORS])
     return (ok == 0u) ? MAP_LOST : MAP_DEGRADED;
 }
 
+/* REQ: MAP-11, SNS-12a */
+map_state_t fusion_map_state_cfg(const fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS])
+{
+    const map_state_t st = fusion_map_state(health);
+    return (st == MAP_OK && !f->orient_confirmed) ? MAP_DEGRADED : st;
+}
+
 /* One sector: candidate over all zones whose extent hits it (5.3 overlap rules), then MAP-13. */
-/* REQ: MAP-05, MAP-09, MAP-10, MAP-13 */
+/* REQ: MAP-05, MAP-05a, MAP-09, MAP-10, MAP-13 */
 static void step_sector(fusion_t *f, uint8_t k, const bool used[TOF_NUM_SENSORS], uint32_t now_us)
 {
     const uint8_t nz = (uint8_t)(f->res * f->res);
@@ -205,38 +269,36 @@ static void step_sector(fusion_t *f, uint8_t k, const bool used[TOF_NUM_SENSORS]
 
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
         const uint64_t mask = f->sector_zones[k][s];
-        if (mask == 0u) {
+        const fusion_frame_t *ff = &f->frame[s];
+        const bool occ_here = used[s] && ff->sec_occ[k].hit;
+        if (mask == 0u && !occ_here) {
             continue;
         }
         if (!used[s]) {
             all_clr = false; /* no data, or FAILED sensor (MAP-10): INV */
             continue;
         }
-        const fusion_frame_t *ff = &f->frame[s];
         const uint32_t age = age_us(now_us, ff->t_us);
         if (!have_t || age > oldest_age) {
             have_t = true;
             oldest_age = age;
             t_oldest = ff->t_us;
         }
+        /* CLR needs every zone of the sector to agree; an OCC zone whose target lies in another
+         * sector (parallax) does not confirm absence here either. */
         for (uint8_t z = 0; z < nz; z++) {
-            if (((mask >> z) & 1u) == 0u) {
-                continue;
-            }
-            const fusion_zone_t *zc = &ff->zone[z];
-            if (zc->cls == ZONE_OCC) {
-                /* Nearest valid target wins; INV of another zone does not cancel it. */
-                if (!found || zc->dist_cm < in.dist_cm) {
-                    found = true;
-                    in.dist_cm = zc->dist_cm;
-                    in.src_sensor = s;
-                    in.src_zone = z;
-                    in.angle_ok = ((f->sector_core[k][s] >> z) & 1u) != 0u;
-                    t_best = ff->t_us;
-                }
-            } else if (zc->cls == ZONE_INV) {
+            if (((mask >> z) & 1u) != 0u && ff->zone[z].cls != ZONE_CLR) {
                 all_clr = false;
             }
+        }
+        /* Nearest valid target wins; INV of another zone does not cancel it. */
+        if (occ_here && (!found || ff->sec_occ[k].dist_cm < in.dist_cm)) {
+            found = true;
+            in.dist_cm = ff->sec_occ[k].dist_cm;
+            in.src_sensor = s;
+            in.src_zone = ff->sec_occ[k].zone;
+            in.angle_ok = ff->sec_occ[k].angle_ok;
+            t_best = ff->t_us;
         }
     }
 
@@ -245,7 +307,7 @@ static void step_sector(fusion_t *f, uint8_t k, const bool used[TOF_NUM_SENSORS]
         in.kind = CELL_CAND_OCC;
         evt = cell_fsm_step(&f->cell[k], &f->ccfg, &in, t_best); /* measurement time */
     } else {
-        in.kind = all_clr ? CELL_CAND_CLR : CELL_CAND_INV; /* CLR needs every zone to agree */
+        in.kind = all_clr ? CELL_CAND_CLR : CELL_CAND_INV;
         evt = cell_fsm_step(&f->cell[k], &f->ccfg, &in, now_us);
     }
     if ((evt & CELL_EVT_HOLD_EXPIRED) != 0u) {
@@ -255,6 +317,19 @@ static void step_sector(fusion_t *f, uint8_t k, const bool used[TOF_NUM_SENSORS]
         f->cell_t_us[k] = t_oldest; /* MAP-09: time of the oldest contribution */
         f->cell_has_time[k] = true;
     }
+}
+
+static void step_all(fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS],
+                     const bool used[TOF_NUM_SENSORS], uint32_t now_us)
+{
+    for (uint8_t k = 0; k < TOF_NUM_SECTORS; k++) {
+        if (f->in_fov[k]) {
+            step_sector(f, k, used, now_us);
+        }
+    }
+    f->state = fusion_map_state_cfg(f, health);
+    f->t_map_us = now_us;
+    f->map_seq++;
 }
 
 /* REQ: MAP-09, MAP-05, MAP-10, MAP-11 */
@@ -270,26 +345,43 @@ void fusion_run(fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS], uint
         }
     }
     bool used[TOF_NUM_SENSORS];
+    bool have_t1 = false;
+    uint32_t t1_age = 0u;
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
         used[s] = false;
         if (!f->frame[s].fresh) {
             continue;
         }
-        if (age_us(now_us, f->frame[s].t_us) - newest_age > f->window_us) {
+        const uint32_t age = age_us(now_us, f->frame[s].t_us);
+        if (age - newest_age > f->window_us) {
             f->frames_late_total++; /* older than the newest frame by more than the window */
         } else {
             used[s] = health[s] != SENSOR_FAILED;
+            if (!have_t1 || age > t1_age) {
+                /* t1 of a SIMULTANEOUS map: the oldest frame used */
+                have_t1 = true;
+                t1_age = age;
+                f->t1_us = f->frame[s].t_us;
+            }
         }
         f->frame[s].fresh = false;
     }
-    for (uint8_t k = 0; k < TOF_NUM_SECTORS; k++) {
-        if (f->in_fov[k]) {
-            step_sector(f, k, used, now_us);
-        }
+    step_all(f, health, used, now_us);
+}
+
+/* REQ: MAP-09a */
+void fusion_run_staggered(fusion_t *f, const sensor_health_t health[TOF_NUM_SENSORS], uint8_t trigger,
+                          uint32_t now_us)
+{
+    const uint32_t t1 = f->frame[trigger].t_us;
+    bool used[TOF_NUM_SENSORS];
+    for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
+        const fusion_frame_t *ff = &f->frame[s];
+        used[s] = ff->has_data && health[s] != SENSOR_FAILED && age_us(t1, ff->t_us) <= f->max_age_us;
+        f->frame[s].fresh = false;
     }
-    f->state = fusion_map_state(health);
-    f->t_map_us = now_us;
-    f->map_seq++;
+    f->t1_us = t1;
+    step_all(f, health, used, now_us);
 }
 
 /* REQ: MAP-09 (STALE), 5.2 */

@@ -1,6 +1,7 @@
 #ifndef CORE_GEOMETRY_H
 #define CORE_GEOMETRY_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "core/config.h"
@@ -103,11 +104,21 @@ geo_vec3_t geo_zone_point_sensor(const geo_mount_t *m, uint8_t i, uint8_t j, flo
 /* Horizontal distance and azimuth in the body frame of a target at range r in zone (i, j). */
 void geo_zone_target(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, float *d_m, float *az_deg);
 
-/* Angular extent of zone (i, j); see geo_zone_extent_t. */
+/* Angular extent of zone (i, j) by ray directions (range -> infinity); see geo_zone_extent_t. */
 void geo_zone_extent(const geo_mount_t *m, uint8_t i, uint8_t j, geo_zone_extent_t *out);
 
-/* h_p = h_tof - z_L of a sensor-frame point. z_L is the levelled vertical offset from the sensor:
- * h_tof is the height of the sensor point itself (MAP-15), so t_m is not added (DEV-04). */
-float geo_point_height(const geo_mount_t *m, geo_vec3_t p_s, float pitch_rad, float roll_rad, float h_tof_m);
+/* MAP-05a: extent in azimuths seen from the body centre at range r_m, with t_m (parallax). */
+void geo_zone_extent_at_range(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, geo_zone_extent_t *out);
+
+/* MAP-14a: h_p = h_body - z_L(p_B), p_B with t_m; all heights refer to the body centre. */
+float geo_point_height(const geo_mount_t *m, geo_vec3_t p_s, float pitch_rad, float roll_rad, float h_body_m);
+
+/* MAP-14a: body-centre height from the optics height of a sensor (on the ground:
+ * TOF_HEIGHT_GROUND_M with MOUNT_XYZ_M): h_body = h_opt + z_L(t_m). */
+float geo_body_height_from_sensor(const geo_mount_t *m, float h_opt_m, float pitch_rad, float roll_rad);
+
+/* MAP-14a: body-centre height from a downward rangefinder at t_rf (RF_XYZ_M), flat ground:
+ * h_body = range * cos(pitch) * cos(roll) + z_L(t_rf). */
+float geo_body_height_from_rf(float range_m, geo_vec3_t t_rf, float pitch_rad, float roll_rad);
 
 #endif /* CORE_GEOMETRY_H */

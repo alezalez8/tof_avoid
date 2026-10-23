@@ -20,6 +20,8 @@ void tof_core_init(tof_core_t *c, const params_t *p, uint32_t now_us)
         sh_init(&c->sh[s], now_us);
     }
     fusion_init(&c->fusion, p);
+    /* SNS-12a: reported once at start (STATUSTEXT "TOF ORIENT NOT CONFIRMED" in E1b). */
+    c->orient_not_confirmed_event = !c->fusion.orient_confirmed;
 }
 
 /* REQ: SNS-09, SNS-11, MAP-10 */
@@ -29,7 +31,8 @@ tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, u
     if (s >= TOF_NUM_SENSORS) {
         return TOF_PUSH_BAD_SENSOR;
     }
-    if (frame->freq_hz == c->freq_hz && frame->res == c->fusion.res && c->fusion.frame[s].fresh) {
+    if (!c->fusion.staggered && frame->freq_hz == c->freq_hz && frame->res == c->fusion.res &&
+        c->fusion.frame[s].fresh) {
         /* A newer frame of the same sensor: fuse the pending set first so no frame is lost and a
          * silent sensor cannot starve the map (MAP-09). */
         sensor_health_t h[TOF_NUM_SENSORS];
@@ -48,7 +51,15 @@ tof_push_status_t tof_core_push_frame(tof_core_t *c, const tof_frame_t *frame, u
     c->have_frame_no[s] = true;
     c->last_frame_no[s] = frame->frame_no;
     c->stats[s].frames++;
-    sh_on_frame(&c->sh[s], &c->sh_cfg, c->fusion.frame[s].valid_frac, now_us);
+    sh_on_frame(&c->sh[s], &c->sh_cfg, c->fusion.frame[s].valid_frac, c->fusion.frame[s].ambient_high,
+                now_us);
+    if (c->fusion.staggered) {
+        /* MAP-09a: every new frame of any sensor triggers a fusion step. */
+        sensor_health_t h[TOF_NUM_SENSORS];
+        health_array(c, h);
+        fusion_run_staggered(&c->fusion, h, s, now_us);
+        c->map_pending = true;
+    }
     return TOF_PUSH_OK;
 }
 
@@ -76,7 +87,7 @@ void tof_core_reinit_done(tof_core_t *c, uint8_t sensor, bool ok, uint32_t now_u
     }
 }
 
-/* REQ: MAP-09, MAP-10, MAP-11 */
+/* REQ: MAP-09, MAP-09a, MAP-10, MAP-11, SNS-12a */
 bool tof_core_update(tof_core_t *c, uint32_t now_us)
 {
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
@@ -84,7 +95,7 @@ bool tof_core_update(tof_core_t *c, uint32_t now_us)
     }
     sensor_health_t h[TOF_NUM_SENSORS];
     health_array(c, h);
-    c->fusion.state = fusion_map_state(h);
+    c->fusion.state = fusion_map_state_cfg(&c->fusion, h);
     bool produced = c->map_pending;
     c->map_pending = false;
     /* A sensor in reinit or FAILED is not waited for (MAP-12 latency); its zones stay INV. */
@@ -92,7 +103,7 @@ bool tof_core_update(tof_core_t *c, uint32_t now_us)
     for (uint8_t s = 0; s < TOF_NUM_SENSORS; s++) {
         h_wait[s] = (c->sh[s].sup == SH_RUNNING) ? h[s] : SENSOR_FAILED;
     }
-    if (fusion_ready(&c->fusion, h_wait, now_us)) {
+    if (!c->fusion.staggered && fusion_ready(&c->fusion, h_wait, now_us)) {
         fusion_run(&c->fusion, h, now_us);
         produced = true;
     }

@@ -227,26 +227,37 @@ void geo_zone_target(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, floa
     *az_deg = geo_azimuth_deg(p_b);
 }
 
-/* REQ: MAP-02 (zone extent is stored). Direction-only: t_m parallax is not included (DEV-05).
- * The azimuth range is sampled on a 5 x 5 grid over the zone, which is exact for an untilted
- * mount and conservative to well below 0.05 deg for the +-15 deg mounting errors allowed. */
-void geo_zone_extent(const geo_mount_t *m, uint8_t i, uint8_t j, geo_zone_extent_t *out)
+/* Azimuth range over a 5 x 5 grid of the zone, exact for an untilted mount and conservative to
+ * well below 0.05 deg for the +-15 deg mounting errors allowed. r_m <= 0: directions only. */
+static void zone_extent(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, geo_zone_extent_t *out)
 {
     const float w = geo_zone_width_deg(m->n);
     const float a_c = geo_zone_alpha_deg(m->n, j);
     const float b_c = geo_zone_beta_deg(m->n, i);
-    const float az_c = geo_azimuth_deg(geo_mat_apply(m->r_bs, geo_dir_sensor(a_c, b_c)));
+    const bool at_range = r_m > 0.0f;
+    float az_c = 0.0f;
     float lo = 0.0f;
     float hi = 0.0f;
-    for (int ka = 0; ka <= 4; ka++) {
-        for (int kb = 0; kb <= 4; kb++) {
-            const float a = a_c - w / 2.0f + w * (float)ka / 4.0f;
-            const float b = b_c - w / 2.0f + w * (float)kb / 4.0f;
-            const float az = geo_azimuth_deg(geo_mat_apply(m->r_bs, geo_dir_sensor(a, b)));
-            const float d = geo_wrap_deg_180(az - az_c);
-            lo = (d < lo) ? d : lo;
-            hi = (d > hi) ? d : hi;
+    for (int k = -1; k < 25; k++) {
+        /* k = -1: centre ray; then the grid. */
+        const float a = (k < 0) ? a_c : a_c - w / 2.0f + w * (float)(k % 5) / 4.0f;
+        const float b = (k < 0) ? b_c : b_c - w / 2.0f + w * (float)(k / 5) / 4.0f;
+        const geo_vec3_t u = geo_dir_sensor(a, b);
+        geo_vec3_t p;
+        if (at_range) {
+            const geo_vec3_t ps = {u.x * r_m, u.y * r_m, u.z * r_m};
+            p = geo_sensor_to_body(m, ps);
+        } else {
+            p = geo_mat_apply(m->r_bs, u);
         }
+        const float az = geo_azimuth_deg(p);
+        if (k < 0) {
+            az_c = az;
+            continue;
+        }
+        const float d = geo_wrap_deg_180(az - az_c);
+        lo = (d < lo) ? d : lo;
+        hi = (d > hi) ? d : hi;
     }
     out->az_center_deg = az_c;
     out->az_min_deg = az_c + lo;
@@ -257,9 +268,33 @@ void geo_zone_extent(const geo_mount_t *m, uint8_t i, uint8_t j, geo_zone_extent
     out->beta_max_deg = b_c + w / 2.0f;
 }
 
-/* REQ: MAP-02 (h_p = h_tof - z_L) */
-float geo_point_height(const geo_mount_t *m, geo_vec3_t p_s, float pitch_rad, float roll_rad, float h_tof_m)
+/* REQ: MAP-02 (zone extent is stored) */
+void geo_zone_extent(const geo_mount_t *m, uint8_t i, uint8_t j, geo_zone_extent_t *out)
 {
-    const geo_vec3_t p_l = geo_body_to_level(geo_mat_apply(m->r_bs, p_s), pitch_rad, roll_rad);
-    return h_tof_m - p_l.z;
+    zone_extent(m, i, j, 0.0f, out);
+}
+
+/* REQ: MAP-05a */
+void geo_zone_extent_at_range(const geo_mount_t *m, uint8_t i, uint8_t j, float r_m, geo_zone_extent_t *out)
+{
+    zone_extent(m, i, j, r_m, out);
+}
+
+/* REQ: MAP-14a (h_p = h_body - z_L(p_B), with t_m) */
+float geo_point_height(const geo_mount_t *m, geo_vec3_t p_s, float pitch_rad, float roll_rad, float h_body_m)
+{
+    const geo_vec3_t p_l = geo_body_to_level(geo_sensor_to_body(m, p_s), pitch_rad, roll_rad);
+    return h_body_m - p_l.z;
+}
+
+/* REQ: MAP-14a */
+float geo_body_height_from_sensor(const geo_mount_t *m, float h_opt_m, float pitch_rad, float roll_rad)
+{
+    return h_opt_m + geo_body_to_level(m->t_m, pitch_rad, roll_rad).z;
+}
+
+/* REQ: MAP-14a */
+float geo_body_height_from_rf(float range_m, geo_vec3_t t_rf, float pitch_rad, float roll_rad)
+{
+    return range_m * cosf(pitch_rad) * cosf(roll_rad) + geo_body_to_level(t_rf, pitch_rad, roll_rad).z;
 }

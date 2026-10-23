@@ -4,7 +4,7 @@
  *   TYPE: U8, U16, U32 (unsigned integer) or F32 (float).
  *   DEFAULT/MIN/MAX: PV_U(x) for integer types, PV_F(x) for F32.
  *
- * Defaults are the TZ start values; min/max are agent-chosen physical bounds (docs/deviations.md, DEV-07).
+ * Defaults are the TZ start values; min/max are provisional (SW-07a) and published in docs/params.md.
  * Build-time parameters (BOARD, SPI_TOPOLOGY, targets per zone) are not here: see CMake and config.h.
  * Adding, removing or reordering entries requires bumping PARAMS_FORMAT_VERSION.
  */
@@ -23,6 +23,7 @@ X(SCHEDULE,              U8,  PV_U(0u),     PV_U(0u),    PV_U(1u))
 X(ORIENT_TRANSFORM_L,    U8,  PV_U(0u),     PV_U(0u),    PV_U(7u))
 X(ORIENT_TRANSFORM_C,    U8,  PV_U(0u),     PV_U(0u),    PV_U(7u))
 X(ORIENT_TRANSFORM_R,    U8,  PV_U(0u),     PV_U(0u),    PV_U(7u))
+X(ORIENT_CONFIRMED,      U8,  PV_U(0u),     PV_U(0u),    PV_U(1u))      /* SNS-12a: set after T-06 */
 
 /* Mounting (MAP-02, HW-07) */
 X(MOUNT_YAW_DEG_L,       F32, PV_F(-30.0f), PV_F(-180.0f), PV_F(180.0f))
@@ -53,6 +54,7 @@ X(VALID_STATUS,          U32, PV_U(0x00000220u), PV_U(0u), PV_U(0xFFFFFFFFu))
 X(SIGMA_MAX_MM,          U16, PV_U(65535u), PV_U(1u),    PV_U(65535u))  /* 65535 = no limit */
 X(SIGNAL_MIN,            U32, PV_U(0u),     PV_U(0u),    PV_U(1000000u))
 X(AMBIENT_CLEAR_MAX,     U32, PV_U(0u),     PV_U(0u),    PV_U(1000000u)) /* 0 = CLEAR_MEASURED off */
+X(AMBIENT_DEGRADED,      U32, PV_U(0u),     PV_U(0u),    PV_U(1000000u)) /* MAP-10a: 0 = off until T-20 */
 
 /* Map (MAP-04, MAP-05, MAP-09, MAP-10, MAP-13) */
 X(ROW_MASK,              U8,  PV_U(0xFFu),  PV_U(1u),    PV_U(0xFFu))   /* bit i = row i, i = 0 top */
@@ -66,7 +68,8 @@ X(VALID_FRAC_MIN,        F32, PV_F(0.5f),   PV_F(0.0f),  PV_F(1.0f))
 X(DEGRADED_TIME_MS,      U16, PV_U(300u),   PV_U(0u),    PV_U(10000u))
 
 /* Ground and flight phases (MAP-07, MAP-14, MAP-16) */
-X(GROUND_POLICY,         U8,  PV_U(0u),     PV_U(0u),    PV_U(1u))      /* 0 = KEEP, 1 = DROP */
+/* MAP-07a: DROP (1) is accepted only in a build with TOF_ALLOW_GROUND_DROP = 1 */
+X(GROUND_POLICY,         U8,  PV_U(0u),     PV_U(0u),    PV_U(TOF_ALLOW_GROUND_DROP)) /* 0 KEEP, 1 DROP */
 X(GROUND_TOL_M,          F32, PV_F(0.15f),  PV_F(0.0f),  PV_F(1.0f))
 X(PHASE_H_FLIGHT_M,      F32, PV_F(1.5f),   PV_F(0.3f),  PV_F(7.0f))
 X(PHASE_H_HYST_M,        F32, PV_F(0.5f),   PV_F(0.0f),  PV_F(3.0f))

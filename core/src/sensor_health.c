@@ -65,8 +65,8 @@ static void trigger(sh_t *s, uint32_t now_us)
     }
 }
 
-/* REQ: SNS-11, MAP-10 */
-void sh_on_frame(sh_t *s, const sh_cfg_t *cfg, float valid_frac, uint32_t now_us)
+/* REQ: SNS-11, MAP-10, MAP-10a */
+void sh_on_frame(sh_t *s, const sh_cfg_t *cfg, float valid_frac, bool ambient_high, uint32_t now_us)
 {
     s->sup = SH_RUNNING;
     s->reinit_request = false;
@@ -74,7 +74,7 @@ void sh_on_frame(sh_t *s, const sh_cfg_t *cfg, float valid_frac, uint32_t now_us
     s->consec_errors = 0u;
     s->consec_reinit_fails = 0u;
     s->t_last_frame_us = now_us;
-    if (valid_frac < cfg->valid_frac_min) {
+    if (valid_frac < cfg->valid_frac_min || ambient_high) {
         if (!s->low_active) {
             s->low_active = true;
             s->t_low_since_us = now_us;

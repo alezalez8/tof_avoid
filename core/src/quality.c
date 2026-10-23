@@ -31,5 +31,6 @@ void quality_zone_eval(const quality_cfg_t *cfg, const tof_zone_t *z, quality_zo
             out->valid_mask |= (uint8_t)(1u << k);
         }
     }
-    out->zone_valid = (n == 0u) || (out->n_valid > 0u);
+    out->has_target = n > 0u;
+    out->zone_valid = out->n_valid > 0u; /* MAP-10a */
 }

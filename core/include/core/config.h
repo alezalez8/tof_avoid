@@ -15,6 +15,11 @@
 #define TOF_TARGETS_PER_ZONE 2u
 #endif
 
+/* MAP-07a: GROUND_POLICY = DROP is rejected unless the human enables this after T-22, T-25, T-26. */
+#ifndef TOF_ALLOW_GROUND_DROP
+#define TOF_ALLOW_GROUND_DROP 0u
+#endif
+
 /* OBSTACLE_DISTANCE grid: 72 sectors of 5 degrees (MAP-05). */
 #define TOF_NUM_SECTORS 72u
 #define TOF_SECTOR_DEG 5.0f

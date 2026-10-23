@@ -19,7 +19,8 @@ typedef struct {
     uint8_t n_targets;  /* min(nb_target_detected, TOF_TARGETS_PER_ZONE) */
     uint8_t n_valid;
     uint8_t valid_mask; /* bit k: target k is valid */
-    bool zone_valid;    /* no detection, or at least one valid target (health, MAP-10; DEV-03) */
+    bool has_target;    /* at least one reported target */
+    bool zone_valid;    /* has_target and at least one valid target (MAP-10a) */
 } quality_zone_t;
 
 void quality_cfg_from_params(quality_cfg_t *cfg, const params_t *p);

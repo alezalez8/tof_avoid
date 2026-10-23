@@ -32,6 +32,7 @@ typedef struct {
     fusion_t fusion;
     uint8_t freq_hz;
     bool map_pending; /* a fusion step ran inside push_frame; reported by the next update */
+    bool orient_not_confirmed_event; /* SNS-12a: ORIENT_CONFIRMED = 0 at start; cleared by the app */
     bool have_frame_no[TOF_NUM_SENSORS];
     uint32_t last_frame_no[TOF_NUM_SENSORS];
     tof_sensor_stats_t stats[TOF_NUM_SENSORS];
