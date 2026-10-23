@@ -389,6 +389,12 @@ class Gcs:
             self.wait(lambda: self.mode() == name, timeout, "mode " + name)
 
     def arm(self, timeout=60.0):
+        """Arms with the throttle stick low (arming check), then restores the throttle override."""
+        thr = self.rc.get(3)
+        if thr:
+            self.rc[3] = 1000
+            time.sleep(0.6)
+
         def try_arm():
             if self.armed():
                 return True
@@ -396,6 +402,8 @@ class Gcs:
             time.sleep(1.0)
             return self.armed()
         self.wait(try_arm, timeout, "armed", poll=0.5)
+        if thr:
+            self.rc[3] = thr
 
     def disarm(self, force=False):
         self.command(mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM, 0, 21196 if force else 0)
