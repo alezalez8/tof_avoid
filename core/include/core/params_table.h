@@ -64,6 +64,7 @@ X(CLEAR_CONFIRM_FRAMES,  U8,  PV_U(3u),     PV_U(1u),    PV_U(50u))
 X(DIST_RELAX_FRAMES,     U8,  PV_U(2u),     PV_U(1u),    PV_U(50u))
 X(HOLD_MAX_MS,           U16, PV_U(500u),   PV_U(0u),    PV_U(5000u))
 X(FUSION_WINDOW_MS,      U16, PV_U(0u),     PV_U(0u),    PV_U(1000u))   /* 0 = 1.5 frame periods */
+X(EXPOSURE_OFFSET_MS,    U16, PV_U(0u),     PV_U(0u),    PV_U(1000u))   /* DEV-12 p. 6: ready -> mid-exposure; 0 = half a frame period */
 X(VALID_DATA_MAX_AGE_MS, U16, PV_U(150u),   PV_U(10u),   PV_U(2000u))
 X(VALID_FRAC_MIN,        F32, PV_F(0.5f),   PV_F(0.0f),  PV_F(1.0f))
 X(DEGRADED_TIME_MS,      U16, PV_U(300u),   PV_U(0u),    PV_U(10000u))

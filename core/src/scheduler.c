@@ -53,6 +53,14 @@ static void fill_rf(sched_t *s, uint32_t now_us)
     s->hin.rf_valid = mavrx_rf_valid(&s->rx, now_us, &s->hin.rf_range_m);
 }
 
+/* REQ: MAP-14, 5.1 (capture time = mid-exposure, DEV-12 p. 6) */
+uint32_t sched_capture_time_us(const sched_t *s, uint32_t t_ready_us)
+{
+    const uint32_t off_ms = params_get_u32(&s->params, PARAM_EXPOSURE_OFFSET_MS);
+    const uint32_t off_us = (off_ms > 0u) ? off_ms * 1000u : 500000u / params_get_u32(&s->params, PARAM_SENSOR_FREQ_HZ);
+    return t_ready_us - off_us;
+}
+
 /* REQ: MAP-14, MAP-14a, MAP-14b, MAP-15, MAP-15b (ground context of a frame) */
 tof_push_status_t sched_push_frame(sched_t *s, const tof_frame_t *frame, uint32_t now_us)
 {
@@ -62,7 +70,7 @@ tof_push_status_t sched_push_frame(sched_t *s, const tof_frame_t *frame, uint32_
     g.cal_tol_deg = params_get_f32(&s->params, PARAM_CAL_TOL_DEG);
     g.cal_tol_el_deg = params_get_f32(&s->params, PARAM_CAL_TOL_EL_DEG);
     if (frame->sensor_id < TOF_NUM_SENSORS &&
-        mavrx_att_at(&s->rx, frame->t_ready_us, now_us, &g.pitch_rad, &g.roll_rad)) {
+        mavrx_att_at(&s->rx, sched_capture_time_us(s, frame->t_ready_us), now_us, &g.pitch_rad, &g.roll_rad)) {
         fill_rf(s, now_us);
         const ground_h_src_t src = ground_body_height(s->phase.phase, &s->hin, &s->core.fusion.mount[frame->sensor_id],
                                                       g.pitch_rad, g.roll_rad, &g.h_body_m);
@@ -342,7 +350,8 @@ static void on_new_map(sched_t *s, uint32_t now_us)
     lg->phase = (uint8_t)s->phase.phase;
     lg->map_state = (uint8_t)tof_core_map_state(&s->core);
     lg->view = (uint8_t)view;
-    lg->att_valid = mavrx_att_at(&s->rx, fu->t1_us, now_us, &lg->pitch_rad, &lg->roll_rad);
+    lg->att_valid =
+        mavrx_att_at(&s->rx, sched_capture_time_us(s, fu->t1_us), now_us, &lg->pitch_rad, &lg->roll_rad);
     lg->fc_mode = s->rx.custom_mode;
     lg->fc_armed = s->rx.armed;
     lg->faults = s->faults;

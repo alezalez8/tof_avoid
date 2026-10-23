@@ -669,6 +669,51 @@ void test_ICD01_time_usec_wraps(void)
     TEST_ASSERT_EQUAL_UINT32(1u, g_s.time_hi);
 }
 
+/* Pitch ramp of 0.1 rad/s: every ATTITUDE sample carries the pitch of its own receive time. */
+#define RAMP_RAD_PER_US 1.0e-7f
+
+/* Runs 1 s of the ramp; every map log uses ATTITUDE at t1 - offset_us (5.1, DEV-12 p. 6). */
+static void check_att_at_capture(uint32_t offset_us)
+{
+    sched_map_log_t lg;
+    int n = 0;
+    for (uint32_t k = 0; k < 1000u / 5u; k++) {
+        g_w.pitch = RAMP_RAD_PER_US * (float)((g_t / (20u * MS) + 1u) * 20u * MS);
+        run(5u);
+        while (sched_take_map_log(&g_s, &lg)) {
+            if (!lg.att_valid || lg.t1_us < offset_us + 40u * MS) {
+                continue;
+            }
+            n++;
+            /* No extrapolation: past the newest sample (20 ms grid, before t3) its value is held. */
+            const uint32_t tc = lg.t1_us - offset_us;
+            const uint32_t newest = lg.t3_us / (20u * MS) * 20u * MS;
+            TEST_ASSERT_FLOAT_WITHIN(2.0e-4f, RAMP_RAD_PER_US * (float)(tc < newest ? tc : newest), lg.pitch_rad);
+        }
+    }
+    TEST_ASSERT_TRUE(n > 5);
+}
+
+/* 5.1, DEV-12 p. 6: ATTITUDE is taken at mid-exposure, EXPOSURE_OFFSET_MS before the frame ready time;
+ * 0 = half a frame period. */
+void test_MAP14_attitude_at_mid_exposure(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(100000u - 33333u, sched_capture_time_us(&g_s, 100000u));
+    check_att_at_capture(33333u); /* 15 Hz: half of 66.7 ms; the 3.3 mrad shift exceeds the tolerance */
+
+    params_t p = g_p;
+    TEST_ASSERT_EQUAL_INT(PARAMS_OK, params_set_u32(&p, PARAM_EXPOSURE_OFFSET_MS, 10u));
+    start(&p, false);
+    TEST_ASSERT_EQUAL_UINT32(90000u, sched_capture_time_us(&g_s, 100000u));
+    TEST_ASSERT_EQUAL_UINT32(0xFFFFFFFFu - 9999u, sched_capture_time_us(&g_s, 0u)); /* wraps like the clock */
+    check_att_at_capture(10000u);
+
+    p = g_p;
+    TEST_ASSERT_EQUAL_INT(PARAMS_OK, params_set_u32(&p, PARAM_SENSOR_FREQ_HZ, 10u));
+    start(&p, false);
+    TEST_ASSERT_EQUAL_UINT32(50000u, sched_capture_time_us(&g_s, 100000u));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -694,5 +739,6 @@ int main(void)
     RUN_TEST(test_FLT10_wall_on_wire);
     RUN_TEST(test_FLT01_internal_fault);
     RUN_TEST(test_ICD01_time_usec_wraps);
+    RUN_TEST(test_MAP14_attitude_at_mid_exposure);
     return UNITY_END();
 }

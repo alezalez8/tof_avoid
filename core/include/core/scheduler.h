@@ -49,7 +49,7 @@ typedef struct {
     uint8_t phase;
     uint8_t map_state;
     uint8_t view;   /* fusion_view_t exported */
-    bool att_valid; /* ATTITUDE at t1 */
+    bool att_valid; /* ATTITUDE at the capture time of the t1 frame (t1 - EXPOSURE_OFFSET_MS) */
     float pitch_rad;
     float roll_rad;
     uint32_t fc_mode;
@@ -128,7 +128,10 @@ void sched_init(sched_t *s, const params_t *p, bool params_defaults, uint32_t no
 
 void sched_uart_rx(sched_t *s, const uint8_t *data, uint32_t len, uint32_t now_us);
 
-/* A frame from the driver; ATTITUDE is interpolated at its ready time for the ground check. */
+/* Capture time of a frame (mid-exposure): t_ready_us - EXPOSURE_OFFSET_MS (0 = half a frame period). */
+uint32_t sched_capture_time_us(const sched_t *s, uint32_t t_ready_us);
+
+/* A frame from the driver; ATTITUDE is interpolated at its capture time for the ground check. */
 tof_push_status_t sched_push_frame(sched_t *s, const tof_frame_t *frame, uint32_t now_us);
 
 /* One pass of the main loop. */

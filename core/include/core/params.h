@@ -96,7 +96,8 @@ params_status_t params_validate(const params_t *p);
 
 /* ---- A/B slot storage ---- */
 
-#define PARAMS_FORMAT_VERSION 3u /* 2: ORIENT_CONFIRMED, AMBIENT_DEGRADED (TZ 5.6); 3: CAL_TOL_EL_DEG (TZ 5.7) */
+#define PARAMS_FORMAT_VERSION 4u /* 2: ORIENT_CONFIRMED, AMBIENT_DEGRADED (TZ 5.6); 3: CAL_TOL_EL_DEG (TZ 5.7);
+                                  * 4: EXPOSURE_OFFSET_MS (DEV-12 p. 6) */
 #define PARAMS_MAGIC 0x50464F54u /* "TOFP" little-endian */
 #define PARAMS_HEADER_SIZE 24u
 #define PARAMS_IMAGE_SIZE (PARAMS_HEADER_SIZE + 4u * (uint32_t)PARAM_COUNT)
