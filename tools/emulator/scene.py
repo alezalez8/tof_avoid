@@ -16,6 +16,7 @@ Run: scene.py --config scene.json  (see SceneConfig); runtime commands as JSON o
 import argparse
 import json
 import math
+import queue
 import random
 import socket
 import sys
@@ -164,7 +165,7 @@ class SensorConfig:
         self.azimuths_deg = j.get("azimuths_deg", [-30.0, 0.0, 30.0])  # MOUNT_YAW_DEG_L/C/R
         self.res = j.get("res", 4)
         self.freq_hz = j.get("freq_hz", 15)
-        self.sub = j.get("sub", 5)                   # rays per zone side
+        self.sub = j.get("sub", 4)                   # rays per zone side
         self.max_range_m = j.get("max_range_m", 4.0)
         self.min_coverage = j.get("min_coverage", 0.12)
         self.cluster_gap_m = j.get("cluster_gap_m", 0.4)
@@ -386,7 +387,11 @@ class Runner:
         self.scene, self.pose = scene, pose
         self.sil = sil_addr
         self.tx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.log = open(log_path, "w", buffering=1) if log_path else None
+        # The log goes through a writer thread: a write to a slow file system (WSL /mnt) must not stall frames.
+        self.log = open(log_path, "w", buffering=1 << 16) if log_path else None
+        self.logq = queue.SimpleQueue()
+        if self.log:
+            threading.Thread(target=self._writer, daemon=True).start()
         self.ctl = None
         if control_port:
             self.ctl = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -395,9 +400,19 @@ class Runner:
         self.quit = False
         self.pending = []  # (send_time, bytes) for latency
 
+    def _writer(self):
+        while True:
+            line = self.logq.get()
+            if line is None:
+                self.log.flush()
+                return
+            self.log.write(line)
+            if self.logq.empty():
+                self.log.flush()
+
     def w(self, rec):
         if self.log:
-            self.log.write(json.dumps(rec, separators=(",", ":")) + "\n")
+            self.logq.put(json.dumps(rec, separators=(",", ":")) + "\n")
 
     def poll_control(self):
         while self.ctl:
@@ -473,6 +488,9 @@ class Runner:
                         "roll": round(roll, 4), "pitch": round(pitch, 4), "yaw": round(yaw, 4),
                         "clr": None if clr == float("inf") else round(clr, 3), "obj": oid})
         self.w({"k": "stop", "t": time.time()})
+        if self.log:
+            self.logq.put(None)
+            time.sleep(0.5)
 
 
 def main(argv=None):

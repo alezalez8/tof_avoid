@@ -423,7 +423,8 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    setvbuf(g_log, NULL, _IOLBF, 1 << 16);
+    /* Fully buffered, flushed once a second: a slow file system (WSL /mnt) must not stall the main loop. */
+    setvbuf(g_log, NULL, _IOFBF, 1 << 20);
 
     /* SW-07: parameters from the A/B slots; both invalid -> safe defaults and an event. */
     static params_flash_t flash;
@@ -517,6 +518,7 @@ int main(int argc, char **argv)
         if ((uint32_t)(now - t_status_us) >= STATUS_PERIOD_US) {
             t_status_us = now;
             log_status(sim, now);
+            fflush(g_log);
         }
         bsp_wait(LOOP_WAIT_US);
     }

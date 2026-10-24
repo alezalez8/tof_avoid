@@ -55,6 +55,12 @@ class Result:
                         "params_extra": st.sitl.params}
         self.d["run_dir"] = str(st.dir.relative_to(H.ROOT))
         self.d["scene"] = st.scene.config
+        # Bench real time: the scene must deliver frames without gaps (a gap > 3 periods is a sensor fault for the
+        # module, SNS-11) - otherwise the run says nothing about the module.
+        ts = [r["t"] for r in st.scene.records() if r.get("k") == "frame" and r.get("s") == 1]
+        gap = max((b - a for a, b in zip(ts, ts[1:])), default=0.0)
+        self.metric("bench_scene_max_frame_gap_s", round(gap, 3))
+        self.check("bench: scene in real time (max frame gap <= 0.2 s)", gap <= 0.2, round(gap, 3), "<= 0.2 s")
 
     @property
     def passed(self):
@@ -183,14 +189,17 @@ def pose_at(poses, t):
 
 
 def _hray(objs, n, e, bearing, h=1.0):
-    """Horizontal range from (n, e) at height h (m above the ground) along a bearing to the nearest object."""
-    o = (n, e, -h)
+    """Horizontal range from (n, e) along a bearing to the nearest object, at the vehicle height h or below it
+    (the sensors see objects below the horizon too; exported distances are horizontal)."""
     d = (math.cos(bearing), math.sin(bearing), 0.0)
     best = None
-    for ob in objs:
-        t = ob.ray(o, d, 0.0)
-        if t is not None and (best is None or t < best):
-            best = t
+    for hh in sorted({h, 0.3, 1.0, 2.0}):
+        if hh > h + 1e-6:
+            continue
+        for ob in objs:
+            t = ob.ray((n, e, -hh), d, 0.0)
+            if t is not None and (best is None or t < best):
+                best = t
     return best
 
 
@@ -219,8 +228,14 @@ def explained(objs, poses, t, rng, bearing_fn, window=EXPLAIN_WINDOW_S):
 def ghost_exports(st, phases=None, max_cm=300):
     """Exported obstacle sectors (d <= max) not explained by a scene object (e.g. the ground), see explained()."""
     import scene as S
+    import bisect
     objs = [S.make_object(o) for o in st.scene.config.get("objects", [])]
-    poses = [r for r in st.scene.records() if r.get("k") == "pose"]
+    recs = st.scene.records()
+    poses = [r for r in recs if r.get("k") == "pose"]
+    # frames in which the scene truth has a ground target within MAX_DIST (+ noise margin): only maps after such
+    # frames (MAP-13 hold window) can carry the ground
+    g_ts = sorted(r["t"] for r in recs if r.get("k") == "frame" and any(
+        len(x) == 2 and x[1] == "ground" and x[0] <= max_cm / 100.0 + 0.3 for tg in r["z"] for x in tg))
     out = []
     for boot in range(1, len(st.module.logs) + 1):
         clk = st.module_clock(boot)
@@ -229,8 +244,9 @@ def ghost_exports(st, phases=None, max_cm=300):
                 continue
             t = clk(r["t3"])
             p = pose_at(poses, t)
-            if p is None:
-                continue
+            i = bisect.bisect_right(g_ts, t)
+            if p is None or i == 0 or t - g_ts[i - 1] > EXPLAIN_WINDOW_S:
+                continue  # no ground in range in the scene: nothing exported can be the ground
             for k, dcm in enumerate(r["d"]):
                 if dcm < 4 or dcm > max_cm:
                     continue
@@ -307,3 +323,138 @@ def oa_active(st):
 def fc_log_modes(st):
     logs = st.sitl.bin_logs()
     return [(x.TimeUS / 1e6, x.Mode) for x in H.bin_messages(logs[-1], ["MODE"])] if logs else []
+
+
+# ---------------------------------------------------------------- flights with injections
+
+class Inject:
+    """A runtime event: when `when(stand, t_rel)` becomes true, `do(stand)` runs once."""
+
+    def __init__(self, name, when, do):
+        self.name, self.when, self.do, self.t = name, when, do, None
+
+
+def at_time(sec):
+    return lambda st, t: t >= sec
+
+
+def near(n, e, dist):
+    def f(st, t):
+        p = st.gcs.pos()
+        return p is not None and math.hypot(p[0] - n, p[1] - e) <= dist
+    return f
+
+
+def sensors(st, powered, which=(0, 1, 2)):
+    for k in which:
+        st.scene.cmd(cmd="sensor", sensor=k, powered=powered)
+
+
+def apply_injections(st, injects, t0, res):
+    now = time.time()
+    for inj in injects:
+        if inj.t is None and inj.when(st, now - t0):
+            inj.t = now
+            inj.do(st)
+            res.step("t+%.1f с: %s" % (now - t0, inj.name))
+
+
+def fly(st, res, kind, target, injects=(), timeout=120.0, alt=3.0, mission=None, tol=1.0):
+    """kind: "AUTO" (mission, ends with LAND), "GUIDED" (takeoff + goto target), "RTL" (mission to target, then RTL
+    home). Returns (t0 of the horizontal phase, reached target flag, time to reach)."""
+    g = st.gcs
+    g.rc_override(c3=1500)
+    tn, te = target
+    if kind == "AUTO":
+        g.upload_mission(mission or [(22, 0, 0, alt, 0), (16, tn, te, alt, 0), (21, tn, te, 0, 0)])
+        g.set_mode("GUIDED")
+        time.sleep(1)
+        g.arm()
+        g.set_mode("AUTO")
+        g.wait(lambda: g.pos() and -g.pos()[2] > alt - 0.4, 40, "takeoff")
+    elif kind == "GUIDED":
+        g.set_mode("GUIDED")
+        time.sleep(1)
+        g.arm()
+        g.takeoff(alt)
+        time.sleep(2)
+        g.goto_ned(tn, te, alt)
+    elif kind == "RTL":
+        g.upload_mission(mission or [(22, 0, 0, alt, 0), (16, tn, te, alt, 0), (17, tn, te, alt, 0)])
+        g.set_mode("GUIDED")
+        time.sleep(1)
+        g.arm()
+        g.set_mode("AUTO")
+        g.wait(lambda: g.pos() and math.hypot(g.pos()[0] - tn, g.pos()[1] - te) < 1.0, 90, "outbound leg")
+        time.sleep(2)
+        g.set_mode("RTL")
+        tn, te = 0.0, 0.0
+    t0 = time.time()
+    res.step("%s: цель (%.1f, %.1f), высота %.1f м" % (kind, tn, te, alt))
+    t_reach = None
+    while time.time() - t0 < timeout:
+        apply_injections(st, injects, t0, res)
+        p = g.pos()
+        if p and math.hypot(p[0] - tn, p[1] - te) < tol and t_reach is None:
+            t_reach = time.time() - t0
+            if all(i.t is not None for i in injects):
+                break
+        if kind == "AUTO" and not g.armed():
+            break
+        time.sleep(0.1)
+    return t0, t_reach is not None, t_reach
+
+
+def land_and_disarm(st, timeout=60.0):
+    g = st.gcs
+    if g.armed():
+        if g.mode() not in ("LAND",):
+            g.set_mode("LAND", wait=False)
+        try:
+            g.wait(lambda: not g.armed(), timeout, "disarm")
+        except TimeoutError:
+            g.disarm(force=True)
+
+
+def avoid_metrics(res, st, t0, strict_collision):
+    """Clearance and collision (scene truth), BendyRuler activity, false activations far from objects (FC-06)."""
+    sc = st.scene.records()
+    clr, hits, best = collisions(sc, t_from=t0)
+    res.metric("min_clearance_m", None if clr == float("inf") else round(clr, 2), key=True)
+    if best:
+        res.metric("min_clearance_at", {k: best[k] for k in ("n", "e", "h", "obj")})
+    res.metric("collision_s", round(len(hits) * 0.1, 1), key=True)
+    if strict_collision:
+        res.check("no collision (clearance > vehicle radius %.2f m)" % H.VEHICLE_RADIUS_M, not hits,
+                  None if clr == float("inf") else round(clr, 2), "> %.2f m" % H.VEHICLE_RADIUS_M)
+    act = [(x.TimeUS / 1e6, x.Act) for x in H.bin_messages(st.sitl.bin_logs()[-1], ["OABR"])] if \
+        st.sitl.bin_logs() else []
+    res.metric("oabr_active_records", sum(1 for _, a in act if a), key=True)
+    # FC-06: BendyRuler active although no object is within lookahead + margin (4 m) of the vehicle
+    off = [t - m.time_boot_ms / 1000.0 for t, m in st.gcs.history("ATTITUDE", 1)]
+    o = sorted(off)[len(off) // 2] if off else 0.0
+    poses = [r for r in sc if r.get("k") == "pose"]
+    false_act = 0
+    for t, a in act:
+        if not a:
+            continue
+        p = pose_at(poses, t + o)
+        if p and (p.get("clr") is None or p["clr"] > 4.0):
+            false_act += 1
+    res.metric("fc06_bendyruler_active_without_object_within_4m", false_act, key=True)
+    return clr, hits
+
+
+def fc_clock(g):
+    """FC boot time (s) -> wall clock, from ATTITUDE time_boot_ms seen by the GCS."""
+    off = [t - m.time_boot_ms / 1000.0 for t, m in g.history("ATTITUDE", 1)]
+    o = sorted(off)[len(off) // 2] if off else 0.0
+    return lambda s: s + o
+
+
+def module_heartbeats(g, since=0.0):
+    return [(t, m.system_status) for t, m in g.history("HEARTBEAT", H.MODULE_COMPID, since)]
+
+
+def first_mode_after(g, name, since):
+    return next((t for t, m in mode_changes(g, since) if m == name), None)

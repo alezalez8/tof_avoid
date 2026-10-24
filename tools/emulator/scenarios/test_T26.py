@@ -2,14 +2,17 @@
 
 Criterion (TZ 13): phase transitions by 5.4; no false avoidance; after takeoff no ground points in the OA
 database; an obstacle in the transition zone right after takeoff is detected and avoided; warnings persist
-during landing. MAP-15, MAP-15b, MAP-16, MAP-16a, MAP-17, MAP-19.
+during landing. FC-05 (TZ 5.8): FLIGHT is confirmed before the first horizontal leg starts. MAP-15, MAP-15b,
+MAP-15c, MAP-16, MAP-16a, MAP-17, MAP-19.
 
-Mission altitude of the first horizontal leg = PHASE_H_FLIGHT_M + PHASE_H_HYST_M = 2.0 m, the lowest allowed by
-the operating rule of 5.4 / section 16 (the worst allowed case).
-a) clean cycle, no obstacles;
+Takeoff altitude before the first horizontal leg = 3 m, the lowest allowed by FC-05 (the worst allowed case).
+a) clean cycle, no obstacles, rangefinder valid on the ground (0.10 m);
 b) a pole in the transition zone 3 m ahead of the takeoff point, landing 1.8 m in front of a box;
-c) as a, rangefinder below its minimum on the ground (reads 0 when landed: MAP-15b at takeoff);
-d) as a with a leg at 8 m, above the 7 m rangefinder range (MAP-15b in flight).
+c) as a, rangefinder below its minimum on the ground (reads 0 when landed: MAP-15c);
+d) as a with a leg at 8 m, above the 7 m rangefinder range (MAP-15b in flight);
+e) LAND with a location: horizontal leg to the landing point with an obstacle on it;
+f) rangefinder stuck below its minimum (every reading below RNGFND1_MIN): MAP-15c "TOF RF STUCK LOW" after
+   RF_LOW_MAX_TAKEOFF_S in TAKEOFF, then MAP-15b.
 """
 
 import statistics
@@ -20,7 +23,7 @@ import math
 from common import (H, Result, collisions, explained, ghost_exports, ghost_oa_items, ground_targets, landed_states,
                     oa_active, oa_db_items, path_deviation, phase_events, pose_at, module_texts)
 
-ALT = 2.0  # PHASE_H_FLIGHT_M + PHASE_H_HYST_M
+ALT = 3.0  # FC-05: takeoff altitude before the first horizontal leg >= 3 m
 TAKEOFF, WAYPOINT, LAND, CONDITION_YAW = 22, 16, 21, 115
 EXPECTED_PHASES = ["GROUND", "ARMED_GROUND", "TAKEOFF", "FLIGHT", "LANDING", "GROUND_RECOVER", "ARMED_GROUND",
                    "GROUND"]
@@ -71,6 +74,25 @@ def check_phases(res, st, g, t_arm):
     tf = t_of("FLIGHT")
     res.check("MAP-16: FLIGHT entered", tf is not None, tf and round(tf - t_arm, 1), "after takeoff")
     return ev
+
+
+def leg_start(st, t_from):
+    """Start of the first horizontal leg: first pose 0.3 m away horizontally from the takeoff point (scene truth)."""
+    poses = [r for r in st.scene.records() if r.get("k") == "pose" and r["t"] >= t_from]
+    if not poses:
+        return None
+    n0, e0 = poses[0]["n"], poses[0]["e"]
+    return next((r["t"] for r in poses if math.hypot(r["n"] - n0, r["e"] - e0) > 0.3), None)
+
+
+def check_flight_before_leg(res, st, ev, t_arm):
+    """FC-05: FLIGHT is confirmed before the first horizontal leg starts."""
+    tf = next((t for t, p, _ in ev if p == "FLIGHT"), None)
+    tl = leg_start(st, t_arm)
+    margin = (tl - tf) if (tf and tl) else None
+    res.metric("fc05_flight_before_leg_s", margin and round(margin, 2), key=True)
+    res.check("FC-05: FLIGHT confirmed before the first horizontal leg", margin is not None and margin >= 0.0,
+              margin and round(margin, 2), ">= 0 s")
 
 
 def check_ground_free(res, st, g, ev, t_arm, objects=False):
@@ -174,6 +196,7 @@ def test_T26_a_clean_cycle():
         t_arm = run_cycle(res, st, mission)
         g = st.gcs
         ev = check_phases(res, st, g, t_arm)
+        check_flight_before_leg(res, st, ev, t_arm)
         check_ground_free(res, st, g, ev, t_arm)
         h14(res, st, g, ev)
         dev = path_deviation(st.scene.records(), (0, 0), (10, 0), t_arm)
@@ -199,6 +222,7 @@ def test_T26_b_transition_obstacle_and_landing():
         t_arm = run_cycle(res, st, mission)
         g = st.gcs
         ev = check_phases(res, st, g, t_arm)
+        check_flight_before_leg(res, st, ev, t_arm)
         n_act = check_ground_free(res, st, g, ev, t_arm, objects=True)
         h14(res, st, g, ev)
         sc = st.scene.records()
@@ -260,7 +284,7 @@ def test_T26_b_transition_obstacle_and_landing():
 
 
 def test_T26_c_rangefinder_invalid_on_ground():
-    res = Result("T-26", "c", "Цикл без препятствий; дальномер на земле ниже минимума (MAP-15b при взлёте)",
+    res = Result("T-26", "c", "Цикл без препятствий; дальномер на земле ниже минимума (MAP-15c)",
                  "Как T-26 a: переходы фаз; нет ложного обхода; после взлёта нет точек земли в базе OA")
     st = H.Stand("T-26_c", scene={"objects": []}, fc_params={"SIM_SONAR_POS_Z": 0.0},
                  module_params={"RF_Z_M": 0.20})
@@ -271,6 +295,7 @@ def test_T26_c_rangefinder_invalid_on_ground():
         t_arm = run_cycle(res, st, mission)
         g = st.gcs
         ev = check_phases(res, st, g, t_arm)
+        check_flight_before_leg(res, st, ev, t_arm)
         check_ground_free(res, st, g, ev, t_arm)
         h14(res, st, g, ev)
         dev = path_deviation(st.scene.records(), (0, 0), (10, 0), t_arm)
@@ -293,6 +318,7 @@ def test_T26_d_above_rangefinder_range():
         t_arm = run_cycle(res, st, mission, timeout=300)
         g = st.gcs
         ev = check_phases(res, st, g, t_arm)
+        check_flight_before_leg(res, st, ev, t_arm)
         check_ground_free(res, st, g, ev, t_arm)
         sts = [r for r in st.module_records("st") if r["ph"] == 4]
         high = [r for r in sts if not r["rf"]]
@@ -316,6 +342,7 @@ def test_T26_e_land_with_location():
         t_arm = run_cycle(res, st, mission)
         g = st.gcs
         ev = check_phases(res, st, g, t_arm)
+        check_flight_before_leg(res, st, ev, t_arm)
         n_act = check_ground_free(res, st, g, ev, t_arm, objects=True)
         h14(res, st, g, ev)
         sc = st.scene.records()
@@ -327,6 +354,42 @@ def test_T26_e_land_with_location():
         res.metric("land_leg_max_lateral_dev_m", round(dev, 2))
         res.check("obstacle on the LAND leg avoided: BendyRuler active and the track bends", n_act > 0 and dev > 0.5,
                   "OABR active %d, dev %.2f m" % (n_act, dev), "active, dev > 0.5 m")
+    finally:
+        st.stop()
+    res.stand(st)
+    assert res.save() == "PASS", [c for c in res.d["checks"] if not c["ok"]]
+
+
+def test_T26_f_rangefinder_stuck_low():
+    res = Result("T-26", "f", "Дальномер залип ниже минимума (все отсчёты < RNGFND1_MIN): MAP-15c, «TOF RF STUCK LOW»",
+                 "MAP-15c: в TAKEOFF ниже минимума дольше RF_LOW_MAX_TAKEOFF_S (5 с) — MAP-15b (FLIGHT) и «TOF RF STUCK LOW»")
+    st = H.Stand("T-26_f", scene={"objects": []}, fc_params={"RNGFND1_MIN": 8.5, "RNGFND1_MAX": 9.0})
+    try:
+        st.start()
+        mission = [(TAKEOFF, 0, 0, ALT, 0), (WAYPOINT, 10, 0, ALT, 0), (LAND, 10, 0, 0, 0)]
+        t_arm = run_cycle(res, st, mission)
+        g = st.gcs
+        ev = phase_events(st)
+        seq = [p for _, p, _ in ev]
+        res.metric("phase_sequence", seq)
+        clk = st.module_clock(1)
+        t_to = next((t for t, p, _ in ev if p == "TAKEOFF"), None)
+        t_fl = next((t for t, p, _ in ev if p == "FLIGHT"), None)
+        stuck = [clk(r["t"]) for r in module_texts(st) if r["text"] == "TOF RF STUCK LOW"]
+        res.metric("stuck_low_text_after_takeoff_s", stuck and t_to and round(stuck[0] - t_to, 2), key=True)
+        res.metric("flight_after_takeoff_s", t_fl and t_to and round(t_fl - t_to, 2), key=True)
+        res.check("MAP-15c: 'TOF RF STUCK LOW' after RF_LOW_MAX_TAKEOFF_S in TAKEOFF",
+                  bool(stuck) and t_to is not None and 5.0 <= stuck[0] - t_to <= 6.0,
+                  stuck and t_to and round(stuck[0] - t_to, 2), "5..6 s")
+        res.check("MAP-15c -> MAP-15b: FLIGHT entered once stuck", t_fl is not None and 5.0 <= t_fl - t_to <= 6.5,
+                  t_fl and t_to and round(t_fl - t_to, 2), "5..6.5 s after TAKEOFF")
+        res.check("MAP-16: cycle ends on the ground", seq[-1:] == ["GROUND"], seq[-1:], "GROUND")
+        gcs_txt = [x for x in g.texts(t_arm, H.MODULE_COMPID) if x[3] == "TOF RF STUCK LOW"]
+        res.check("'TOF RF STUCK LOW' reaches the GCS", bool(gcs_txt), len(gcs_txt), ">= 1")
+        gh = ghost_exports(st, phases=["TAKEOFF", "FLIGHT", "LANDING"])
+        res.metric("ground_export_sector_maps_by_phase (MAP-15b: classification off)",
+                   {p: sum(1 for x in gh if x["phase"] == p) for p in ("TAKEOFF", "FLIGHT", "LANDING")}, key=True)
+        res.note("Ground exported near touchdown is the specified MAP-15b behaviour with a stuck rangefinder.")
     finally:
         st.stop()
     res.stand(st)
