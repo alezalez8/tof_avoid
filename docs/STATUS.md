@@ -33,11 +33,11 @@
 кадра), FC-04 (`RC7_OPTION` убран из `params/*.param`), FC-05 (взлёт 3 м и проверка в T-26). Юнит-тесты — pass
 (17/17 наборов, покрытие `core/` 99,2 % строк). Осталось: **FC-06** — проверка смещения точек OA в T-13 c…l (метрика
 есть, в a/b ложных срабатываний 0); решение по `ATC_RATE_Y_MAX` — по её итогам. Толкование агента по MAP-15c
-(залипание сохраняется после TAKEOFF до конца серии отсчётов ниже минимума) записано в DEV-14.
+(залипание сохраняется после TAKEOFF до конца серии отсчётов ниже минимума) утверждено человеком (DEV-14).
 
 ## Ждёт человека
 
-- Открытых DEV-записей нет (DEV-13, DEV-14 закрыты ТЗ 5.8). На ревью: толкование залипания (DEV-14, последний абзац).
+- Открытых DEV-записей нет (DEV-13, DEV-14 закрыты ТЗ 5.8; толкование залипания MAP-15c утверждено 2026-10-24).
 - Ранее: ревью временных пределов `docs/params.md` (SW-07a); `ORIENT_TRANSFORM` и `ORIENT_CONFIRMED = 1` после T-06;
   `EXPOSURE_OFFSET_MS` по T-05; `params/fc_tof_v1.param` — ревью (FC-01), индекс `MAVn_*` порта модуля на Cube.
 
@@ -55,8 +55,10 @@
    ```
    tools/scripts/build_host.sh && tools/scripts/test.sh          # 17/17
    source ~/venvs/tof_avoid/bin/activate && python -m pytest -q tools/emulator/tests
-   tools/emulator/run_all.sh T12                                  # дымовой SITL-прогон (~3 мин)
    ```
-2. Прогнать `tools/emulator/run_all.sh T13 T14 T15 T16 T18 T19` (≈ 1,5 ч), разобрать провалы (сначала отличать ошибки
-   сценария и стенда — проверка `bench: scene in real time` — от дефектов модуля), написать `report_notes/T-xx.md`.
-3. Финальный `tools/emulator/run_all.sh` (все, включая T-26) → отчёты, traceability, закрытие E3 человеком.
+2. Сначала полный прогон `tools/emulator/run_all.sh` (все сценарии), в т. ч. повтор T-26 a…f с новой сценой 4×4 луча
+   на зону.
+3. Затем T-13 c…l (`tools/emulator/run_all.sh T13`) — разбор, FC-06 и решение по `ATC_RATE_Y_MAX`.
+4. Затем первые запуски T-14, T-15, T-16, T-18, T-19: разбор провалов (сначала отличать ошибки сценария и стенда —
+   проверка `bench: scene in real time` — от дефектов модуля), `report_notes/T-xx.md`, отчёты, traceability.
+5. Финальный `tools/emulator/run_all.sh` → закрытие E3 человеком.
