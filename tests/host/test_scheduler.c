@@ -473,6 +473,99 @@ void test_MAP15b_rangefinder_lost_in_air(void)
     TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_s.phase.phase);
 }
 
+/* MAP-15c end to end: a below-minimum reading on the ground and at takeoff is "at the ground": the ground check
+ * stays on with TOF_HEIGHT_GROUND_M, the ground is not exported in TAKEOFF; no "RF INVALID ON GROUND". */
+void test_MAP15c_low_reading_at_takeoff_keeps_ground(void)
+{
+    g_w.rf_cm = 5u; /* below min_distance 10 */
+    g_w.zone_c = RAW(3u, 1u);
+    g_w.r_c_mm = 689; /* ground at 0.20 m */
+    run(3000u);
+    g_w.armed = true;
+    g_w.mode = TOF_COPTER_MODE_AUTO;
+    g_w.ls = MAV_LANDED_STATE_TAKEOFF;
+    fc_hb();
+    run(1000u);
+    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_s.phase.phase);
+    TEST_ASSERT_EQUAL_UINT8(1u, g_s.core.fusion.frame[TOF_SENSOR_C].n_ground_zones);
+    TEST_ASSERT_EQUAL_UINT16(65535u, min_od());
+    TEST_ASSERT_FALSE(text_seen("TOF RF"));
+}
+
+/* MAP-15c: below the minimum for longer than RF_LOW_MAX_TAKEOFF_S in TAKEOFF - stuck low: MAP-15b (FLIGHT,
+ * classification off) and "TOF RF STUCK LOW"; a valid reading ends it. */
+void test_MAP15c_stuck_low_in_takeoff(void)
+{
+    g_w.rf_cm = 5u;
+    g_w.zone_c = RAW(3u, 1u);
+    g_w.r_c_mm = 689;
+    run(10u);
+    g_w.armed = true;
+    g_w.mode = TOF_COPTER_MODE_AUTO;
+    g_w.ls = MAV_LANDED_STATE_IN_AIR;
+    fc_hb();
+    run(4900u);
+    TEST_ASSERT_EQUAL_INT(PHASE_TAKEOFF, g_s.phase.phase); /* ground height 0.2 m < PHASE_H_FLIGHT_M */
+    TEST_ASSERT_FALSE(g_s.rf_stuck_low);
+    run(300u);
+    TEST_ASSERT_TRUE(g_s.rf_stuck_low);
+    run(300u);
+    TEST_ASSERT_EQUAL_INT(PHASE_FLIGHT, g_s.phase.phase);
+    TEST_ASSERT_TRUE(text_seen("TOF RF STUCK LOW"));
+    TEST_ASSERT_EQUAL_UINT8(0u, g_s.core.fusion.frame[TOF_SENSOR_C].n_ground_zones);
+    g_w.rf_cm = 160u;
+    run(200u);
+    TEST_ASSERT_FALSE(g_s.rf_stuck_low);
+    TEST_ASSERT_EQUAL_INT(GROUND_RF_OK, g_s.hin.rf);
+}
+
+/* DIA-03a: in GROUND / ARMED_GROUND without rangefinder messages (or above the maximum) for 2 s -
+ * "TOF RF INVALID ON GROUND"; not in the air. */
+void test_DIA03a_rf_invalid_on_ground(void)
+{
+    run(1500u);
+    TEST_ASSERT_FALSE(text_seen("TOF RF INVALID ON GROUND"));
+    run(1500u);
+    TEST_ASSERT_TRUE(text_seen("TOF RF INVALID ON GROUND"));
+    setUp();
+    g_w.rf_cm = 800u; /* above max 700 */
+    g_w.armed = true;
+    run(4000u);
+    TEST_ASSERT_EQUAL_INT(PHASE_ARMED_GROUND, g_s.phase.phase);
+    TEST_ASSERT_TRUE(text_seen("TOF RF INVALID ON GROUND"));
+    setUp();
+    to_flight(0.0f);
+    g_w.rf_cm = 800u;
+    run(4000u);
+    TEST_ASSERT_FALSE(text_seen("TOF RF INVALID ON GROUND"));
+}
+
+/* DIA-03a: after FAILED, "TOF SENSOR x OK" only with the first accepted frame, not at a reinit attempt. */
+void test_DIA03a_sensor_ok_only_after_frame(void)
+{
+    g_w.rf_cm = 20u;
+    run(1000u);
+    g_w.sensors_mask = 0x6u; /* L stops: reinits fail (no report within 1 s) */
+    uint32_t waited = 0u;
+    while (tof_core_sensor_health(&g_s.core, TOF_SENSOR_L) != SENSOR_FAILED && waited < 30000u) {
+        run(100u);
+        waited += 100u;
+    }
+    TEST_ASSERT_EQUAL_INT(SENSOR_FAILED, tof_core_sensor_health(&g_s.core, TOF_SENSOR_L));
+    run(3000u);
+    TEST_ASSERT_TRUE(text_seen("TOF SENSOR L LOST"));
+    run(25000u); /* two retries every 10 s, still no frames */
+    TEST_ASSERT_FALSE(text_seen("TOF SENSOR L OK"));
+    g_w.sensors_mask = 0x7u;
+    for (waited = 0u; !text_seen("TOF SENSOR L OK") && waited < 15000u; waited += 100u) {
+        if (tof_core_take_reinit_request(&g_s.core, TOF_SENSOR_L)) {
+            tof_core_reinit_done(&g_s.core, TOF_SENSOR_L, true, g_t);
+        }
+        run(100u);
+    }
+    TEST_ASSERT_TRUE(text_seen("TOF SENSOR L OK"));
+}
+
 /* FLT-05 end to end: armed in AUTO on the ground with a fault - no command; FLT-01/FLT-03: in FLIGHT
  * frames stop - stale after > 300 ms and DO_SET_MODE BRAKE on the same pass. */
 void test_FLT03_end_to_end_stale_map(void)
@@ -727,6 +820,10 @@ int main(void)
     RUN_TEST(test_MAP17_ground_phase_export);
     RUN_TEST(test_MAP17_flight_keep_exports_ground);
     RUN_TEST(test_MAP15b_rangefinder_lost_in_air);
+    RUN_TEST(test_MAP15c_low_reading_at_takeoff_keeps_ground);
+    RUN_TEST(test_MAP15c_stuck_low_in_takeoff);
+    RUN_TEST(test_DIA03a_rf_invalid_on_ground);
+    RUN_TEST(test_DIA03a_sensor_ok_only_after_frame);
     RUN_TEST(test_FLT03_end_to_end_stale_map);
     RUN_TEST(test_FLT06_end_to_end_rejected);
     RUN_TEST(test_FLT02_lost_stops_distance);

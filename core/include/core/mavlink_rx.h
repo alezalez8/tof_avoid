@@ -31,6 +31,13 @@ typedef struct {
     float pitch_rad;
 } mavrx_att_t;
 
+/* MAP-15c: state of the downward rangefinder. */
+typedef enum {
+    MAVRX_RF_FAULT = 0, /* above max_distance, invalid signal or no sample for > 500 ms (MAP-15b) */
+    MAVRX_RF_OK,        /* min_distance < reading <= max_distance */
+    MAVRX_RF_LOW        /* reading <= min_distance: the vehicle is at the ground */
+} mavrx_rf_state_t;
+
 typedef struct {
     uint16_t command;
     uint8_t sysid; /* requester */
@@ -86,6 +93,10 @@ typedef struct {
     bool rf_valid_seen;  /* a valid sample was received */
     uint32_t t_rf_valid_us;
     float rf_range_m;    /* the last valid sample */
+    bool rf_low_seen;    /* MAP-15c: a sample at or below min_distance was received */
+    uint32_t t_rf_low_us;
+    bool rf_low_run;     /* the samples since t_rf_low_since_us are all below the minimum */
+    uint32_t t_rf_low_since_us;
 
     /* COMMAND_ACK from the FC: logged, never a success criterion (FLT-03) */
     bool ack_evt;
@@ -119,6 +130,14 @@ bool mavrx_att_at(const mavrx_t *r, uint32_t t_us, uint32_t now_us, float *pitch
 /* Rangefinder distance (m) of the last valid sample (inside its own min/max, signal not invalid) if
  * that sample is not older than 500 ms (MAP-15b: invalid for longer than 500 ms). */
 bool mavrx_rf_valid(const mavrx_t *r, uint32_t now_us, float *range_m);
+
+/* MAP-15c: the newer of the last valid and the last below-minimum sample, if not older than 500 ms;
+ * otherwise MAVRX_RF_FAULT. A single sample above the maximum does not end a state before 500 ms.
+ * range_m is set for MAVRX_RF_OK only. */
+mavrx_rf_state_t mavrx_rf_state(const mavrx_t *r, uint32_t now_us, float *range_m);
+
+/* MAP-15c: start of the current run of below-minimum samples (any other sample ends it); false if none. */
+bool mavrx_rf_low_since(const mavrx_t *r, uint32_t now_us, uint32_t *since_us);
 
 /* Takes one pending ICD-04 refusal; false if none. */
 bool mavrx_take_nack(mavrx_t *r, mavrx_nack_t *out);

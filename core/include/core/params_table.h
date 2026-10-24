@@ -75,6 +75,7 @@ X(GROUND_POLICY,         U8,  PV_U(0u),     PV_U(0u),    PV_U(TOF_ALLOW_GROUND_D
 X(GROUND_TOL_M,          F32, PV_F(0.15f),  PV_F(0.0f),  PV_F(1.0f))
 X(PHASE_H_FLIGHT_M,      F32, PV_F(1.5f),   PV_F(0.3f),  PV_F(7.0f))
 X(PHASE_H_HYST_M,        F32, PV_F(0.5f),   PV_F(0.0f),  PV_F(3.0f))
+X(RF_LOW_MAX_TAKEOFF_S,  U8,  PV_U(5u),     PV_U(1u),    PV_U(60u))     /* MAP-15c: below-minimum reading in TAKEOFF */
 
 /* MAVLink (ICD) */
 X(MIN_DIST_CM,           U16, PV_U(4u),     PV_U(1u),    PV_U(600u))

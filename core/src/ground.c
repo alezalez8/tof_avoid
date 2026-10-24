@@ -48,16 +48,20 @@ bool ground_target_compatible(const geo_mount_t *m, uint8_t i, uint8_t j, float 
     return ground_min_height(m, i, j, r_m, g) <= g->tol_m;
 }
 
-/* REQ: MAP-15, MAP-15b */
-ground_h_src_t ground_height_source(phase_t ph, bool rf_valid)
+/* REQ: MAP-15, MAP-15b, MAP-15c */
+ground_h_src_t ground_height_source(phase_t ph, ground_rf_t rf)
 {
     switch (ph) {
     case PHASE_GROUND:
     case PHASE_ARMED_GROUND:
     case PHASE_GROUND_RECOVER:
         return GROUND_H_PARAM;
-    default: /* TAKEOFF, FLIGHT, LANDING, PHASE_UNKNOWN: never the ground parameter in the air */
-        return rf_valid ? GROUND_H_RANGEFINDER : GROUND_H_NONE;
+    default: /* TAKEOFF, FLIGHT, LANDING, PHASE_UNKNOWN */
+        if (rf == GROUND_RF_OK) {
+            return GROUND_H_RANGEFINDER;
+        }
+        /* MAP-15c: below the minimum = at the ground; a fault turns classification off (MAP-15b). */
+        return (rf == GROUND_RF_LOW) ? GROUND_H_PARAM : GROUND_H_NONE;
     }
 }
 
@@ -65,7 +69,7 @@ ground_h_src_t ground_height_source(phase_t ph, bool rf_valid)
 ground_h_src_t ground_body_height(phase_t ph, const ground_height_in_t *in, const geo_mount_t *m,
                                   float pitch_rad, float roll_rad, float *h_m)
 {
-    const ground_h_src_t src = ground_height_source(ph, in->rf_valid);
+    const ground_h_src_t src = ground_height_source(ph, in->rf);
     if (src == GROUND_H_RANGEFINDER) {
         *h_m = geo_body_height_from_rf(in->rf_range_m, in->rf_xyz, pitch_rad, roll_rad);
     } else if (src == GROUND_H_PARAM) {

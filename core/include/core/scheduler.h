@@ -29,6 +29,7 @@
 #define SCHED_NV_PERIOD_US 1000000u
 #define SCHED_REQ_PERIOD_US 5000000u    /* SET_MESSAGE_INTERVAL repeated while a stream is missing */
 #define SCHED_OVERFLOW_HOLD_US 1000000u /* internal fault class kept after a TX queue overflow */
+#define SCHED_RF_GROUND_DEBOUNCE_US 2000000u /* DIA-03a: rangefinder invalid on the ground this long */
 
 typedef enum {
     SCHED_STREAM_ATTITUDE = 0,
@@ -98,6 +99,13 @@ typedef struct {
     uint32_t t_overflow_us;
     bool overflow_recent;
     uint8_t faults;
+
+    mavrx_rf_state_t rf_raw;   /* MAP-15c: rangefinder state from mavlink_rx */
+    bool rf_stuck_low;         /* below minimum for > RF_LOW_MAX_TAKEOFF_S in TAKEOFF: treated as a fault */
+    uint32_t rf_low_max_us;
+    uint32_t t_rf_not_fault_us; /* DIA-03a debounce */
+    bool sensor_lost[TOF_NUM_SENSORS];      /* DIA-03a: LOST reported until a frame is accepted again */
+    uint32_t frames_at_lost[TOF_NUM_SENSORS];
 
     bool hb_sent;
     uint32_t t_hb_us;

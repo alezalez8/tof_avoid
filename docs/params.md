@@ -1,7 +1,7 @@
 # Параметры модуля
 
 Генерируется из `core/include/core/params_table.h` утилитой `tools/params_md` (`tools/scripts/params_md.sh`); вручную не править.
-Пределы min/max — временные, на ревью человеком (ТЗ 5.6, SW-07a). Версия формата слота: 4.
+Пределы min/max — временные, на ревью человеком (ТЗ 5.6, SW-07a). Версия формата слота: 5.
 Умолчания `LCD_ENABLE` и `LOG_LEVEL` — для сборки DEBUG; `GROUND_POLICY` max = 1 только при `TOF_ALLOW_GROUND_DROP = 1` (MAP-07a).
 
 | # | Имя | Тип | Умолчание | Min | Max |
@@ -55,20 +55,21 @@
 | 46 | `GROUND_TOL_M` | f32 | 0.15 | 0 | 1 |
 | 47 | `PHASE_H_FLIGHT_M` | f32 | 1.5 | 0.3 | 7 |
 | 48 | `PHASE_H_HYST_M` | f32 | 0.5 | 0 | 3 |
-| 49 | `MIN_DIST_CM` | u16 | 4 | 1 | 600 |
-| 50 | `MAX_DIST_CM` | u16 | 300 | 10 | 600 |
-| 51 | `MAV_DISTANCE_RATE_HZ` | u8 | 10 | 1 | 30 |
-| 52 | `UART_BAUD` | u32 | 115200 | 9600 | 921600 |
-| 53 | `MAV_SYSID` | u8 | 0 | 0 | 255 |
-| 54 | `MAV_COMPID` | u8 | 196 | 1 | 255 |
-| 55 | `FAULT_ACTION` | u8 | 1 | 0 | 2 |
-| 56 | `FAULT_TRIGGER_MASK` | u8 | 0xD | 0x0 | 0x3F |
-| 57 | `FAULT_ON_REBOOT` | u8 | 1 | 0 | 1 |
-| 58 | `FAULT_WALL` | u8 | 0 | 0 | 1 |
-| 59 | `WARN_CM` | u16 | 250 | 10 | 600 |
-| 60 | `CRIT_CM` | u16 | 120 | 10 | 600 |
-| 61 | `WARN_HYST_CM` | u16 | 30 | 0 | 200 |
-| 62 | `LCD_ENABLE` | u8 | 1 | 0 | 1 |
-| 63 | `LCD_RATE_HZ` | u8 | 5 | 1 | 20 |
-| 64 | `NAMED_VALUE_ENABLE` | u8 | 0 | 0 | 1 |
-| 65 | `LOG_LEVEL` | u8 | 1 | 0 | 1 |
+| 49 | `RF_LOW_MAX_TAKEOFF_S` | u8 | 5 | 1 | 60 |
+| 50 | `MIN_DIST_CM` | u16 | 4 | 1 | 600 |
+| 51 | `MAX_DIST_CM` | u16 | 300 | 10 | 600 |
+| 52 | `MAV_DISTANCE_RATE_HZ` | u8 | 10 | 1 | 30 |
+| 53 | `UART_BAUD` | u32 | 115200 | 9600 | 921600 |
+| 54 | `MAV_SYSID` | u8 | 0 | 0 | 255 |
+| 55 | `MAV_COMPID` | u8 | 196 | 1 | 255 |
+| 56 | `FAULT_ACTION` | u8 | 1 | 0 | 2 |
+| 57 | `FAULT_TRIGGER_MASK` | u8 | 0xD | 0x0 | 0x3F |
+| 58 | `FAULT_ON_REBOOT` | u8 | 1 | 0 | 1 |
+| 59 | `FAULT_WALL` | u8 | 0 | 0 | 1 |
+| 60 | `WARN_CM` | u16 | 250 | 10 | 600 |
+| 61 | `CRIT_CM` | u16 | 120 | 10 | 600 |
+| 62 | `WARN_HYST_CM` | u16 | 30 | 0 | 200 |
+| 63 | `LCD_ENABLE` | u8 | 1 | 0 | 1 |
+| 64 | `LCD_RATE_HZ` | u8 | 5 | 1 | 20 |
+| 65 | `NAMED_VALUE_ENABLE` | u8 | 0 | 0 | 1 |
+| 66 | `LOG_LEVEL` | u8 | 1 | 0 | 1 |

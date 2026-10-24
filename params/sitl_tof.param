@@ -63,8 +63,8 @@ WP_YAW_BEHAVIOR 1
 WP_SPD 1.0
 RTL_SPEED_MS 1.0
 
-# --- avoidance switch (TZ section 8; see DEV-13) ---
-RC7_OPTION 40
+# --- FC-04 (TZ 5.8): no RCx_OPTION = 40 - in 4.7.2 it switches Simple Avoidance only, not BendyRuler.
+# Emergency avoidance off in flight: mode switch to Loiter or AltHold; between flights: OA_TYPE = 0. ---
 
 # --- downward rangefinder (MTF-01 stand-in), up to 7 m ---
 RNGFND1_TYPE 100

@@ -372,6 +372,39 @@ void test_MAP15_rangefinder(void)
     TEST_ASSERT_FALSE(mavrx_rf_valid(&g_rx, 800u * MS, &h));
 }
 
+/* MAP-15c: a reading <= min_distance is "at the ground", not a fault; above the maximum or silence for > 500 ms
+ * is a fault; the newer of a valid and a low sample wins; the run of low samples has a start time. */
+void test_MAP15c_rangefinder_states(void)
+{
+    float h = 0.0f;
+    uint32_t since = 0u;
+    feed_hb(false, 0u, 0u);
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_FAULT, mavrx_rf_state(&g_rx, 0u, &h));
+    TEST_ASSERT_FALSE(mavrx_rf_low_since(&g_rx, 0u, &since));
+    feed_rf(FC_SYS, 10u, MAVRX_RF_ORIENTATION, 0u, 100u * MS); /* == min 10 */
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_LOW, mavrx_rf_state(&g_rx, 100u * MS, &h));
+    TEST_ASSERT_FALSE(mavrx_rf_valid(&g_rx, 100u * MS, &h));
+    feed_rf(FC_SYS, 0u, MAVRX_RF_ORIENTATION, 0u, 200u * MS);
+    TEST_ASSERT_TRUE(mavrx_rf_low_since(&g_rx, 200u * MS, &since));
+    TEST_ASSERT_EQUAL_UINT32(100u * MS, since);
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_LOW, mavrx_rf_state(&g_rx, 700u * MS, &h));
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_FAULT, mavrx_rf_state(&g_rx, 700u * MS + 1u, &h)); /* silence > 500 ms */
+    TEST_ASSERT_FALSE(mavrx_rf_low_since(&g_rx, 700u * MS + 1u, &since));
+    feed_rf(FC_SYS, 11u, MAVRX_RF_ORIENTATION, 0u, 800u * MS); /* just above the minimum */
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_OK, mavrx_rf_state(&g_rx, 800u * MS, &h));
+    TEST_ASSERT_FLOAT_WITHIN(1e-6f, 0.11f, h);
+    feed_rf(FC_SYS, 5u, MAVRX_RF_ORIENTATION, 0u, 900u * MS); /* newer low sample wins */
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_LOW, mavrx_rf_state(&g_rx, 900u * MS, &h));
+    TEST_ASSERT_TRUE(mavrx_rf_low_since(&g_rx, 900u * MS, &since));
+    TEST_ASSERT_EQUAL_UINT32(900u * MS, since); /* a valid sample ended the previous run */
+    feed_rf(FC_SYS, 800u, MAVRX_RF_ORIENTATION, 0u, 1000u * MS); /* above max: ends the run, state kept 500 ms */
+    TEST_ASSERT_FALSE(mavrx_rf_low_since(&g_rx, 1000u * MS, &since));
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_LOW, mavrx_rf_state(&g_rx, 1400u * MS, &h));
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_FAULT, mavrx_rf_state(&g_rx, 1401u * MS, &h));
+    feed_rf(FC_SYS, 0u, MAVRX_RF_ORIENTATION, 1u, 1500u * MS); /* invalid signal: a fault, not low */
+    TEST_ASSERT_EQUAL_INT(MAVRX_RF_FAULT, mavrx_rf_state(&g_rx, 1500u * MS, &h));
+}
+
 /* FLT-03: COMMAND_ACK from the FC is recorded (for the log). */
 void test_FLT03_command_ack_recorded(void)
 {
@@ -564,6 +597,7 @@ int main(void)
     RUN_TEST(test_MAP14_attitude_timeout_and_gap);
     RUN_TEST(test_MAP14_attitude_roll_wrap);
     RUN_TEST(test_MAP15_rangefinder);
+    RUN_TEST(test_MAP15c_rangefinder_states);
     RUN_TEST(test_FLT03_command_ack_recorded);
     RUN_TEST(test_ICD04_commands_refused);
     RUN_TEST(test_ICD03_fuzz_garbage);

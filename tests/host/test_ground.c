@@ -220,19 +220,30 @@ void test_MAP14a_offset_cancels_on_ground(void)
 }
 
 /* MAP-15, MAP-15b: height source by phase; the ground parameter is never used in the air. */
+/* MAP-15c: a below-minimum reading in the air phases gives the ground height (classification on). */
+void test_MAP15c_height_source_low_reading(void)
+{
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_TAKEOFF, GROUND_RF_LOW));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_LANDING, GROUND_RF_LOW));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_FLIGHT, GROUND_RF_LOW));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_UNKNOWN, GROUND_RF_LOW));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_GROUND, GROUND_RF_LOW));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_TAKEOFF, GROUND_RF_FAULT));
+}
+
 void test_MAP15_height_source_by_phase(void)
 {
-    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_FLIGHT, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_FLIGHT, false));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_GROUND, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_ARMED_GROUND, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_GROUND_RECOVER, false));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_TAKEOFF, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_TAKEOFF, false));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_LANDING, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_LANDING, false));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_UNKNOWN, true));
-    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_UNKNOWN, false));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_FLIGHT, GROUND_RF_OK));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_FLIGHT, GROUND_RF_FAULT));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_GROUND, GROUND_RF_OK));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_ARMED_GROUND, GROUND_RF_OK));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_PARAM, ground_height_source(PHASE_GROUND_RECOVER, GROUND_RF_FAULT));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_TAKEOFF, GROUND_RF_OK));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_TAKEOFF, GROUND_RF_FAULT));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_LANDING, GROUND_RF_OK));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_LANDING, GROUND_RF_FAULT));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_RANGEFINDER, ground_height_source(PHASE_UNKNOWN, GROUND_RF_OK));
+    TEST_ASSERT_EQUAL_INT(GROUND_H_NONE, ground_height_source(PHASE_UNKNOWN, GROUND_RF_FAULT));
 }
 
 /* MAP-15, MAP-14a: the rangefinder height is corrected by RF_XYZ_M and attitude; no source leaves the
@@ -443,6 +454,7 @@ int main(void)
     RUN_TEST(test_MAP14_no_orientation_no_flag);
     RUN_TEST(test_MAP14a_offset_cancels_on_ground);
     RUN_TEST(test_MAP15_height_source_by_phase);
+    RUN_TEST(test_MAP15c_height_source_low_reading);
     RUN_TEST(test_MAP15_body_height_values);
     RUN_TEST(test_MAP18_ground_zone_flagged);
     RUN_TEST(test_MAP18_mixed_zone_ground_and_low_target);

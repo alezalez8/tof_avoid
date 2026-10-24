@@ -26,7 +26,7 @@
 #define EV_RATE_TYPE_US 1000000u /* per message type */
 #define EV_RATE_TOTAL 3u         /* messages per 1 s window */
 #define EV_DIST_NONE 65535u      /* no obstacle */
-#define EV_MSG_IDS 64u           /* message ids: channel * 4 + state, 32 + one-shot */
+#define EV_MSG_IDS 64u           /* message ids: channel * 4 + state, 40 + one-shot */
 
 /* State channels: a message when the state differs from the last reported one. */
 typedef enum {
@@ -38,6 +38,7 @@ typedef enum {
     EV_CH_MAP_LOST,     /* 1: map LOST; back to 0 silently */
     EV_CH_FC_LINK,      /* 1: FC telemetry lost; back to 0 silently */
     EV_CH_PHASE,        /* 1: PHASE_UNKNOWN; back to 0 silently */
+    EV_CH_RF_GROUND,    /* DIA-03a: 1: rangefinder invalid in GROUND / ARMED_GROUND; back to 0 silently */
     EV_CH_COUNT
 } ev_channel_t;
 
@@ -49,6 +50,7 @@ typedef enum {
     EV_ONE_PILOT_RESUMED,  /* FLT-04 */
     EV_ONE_PARAMS_DEFAULT, /* SW-07: both slots invalid */
     EV_ONE_ORIENT,         /* SNS-12a */
+    EV_ONE_RF_STUCK_LOW,   /* MAP-15c */
     EV_ONE_READY,          /* start-up readiness with version */
     EV_ONE_COUNT
 } ev_oneshot_t;

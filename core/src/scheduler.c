@@ -28,6 +28,8 @@ void sched_init(sched_t *s, const params_t *p, bool params_defaults, uint32_t no
     s->od_period_us = 1000000u / params_get_u32(p, PARAM_MAV_DISTANCE_RATE_HZ);
     s->od_tokens_us = s->od_period_us;
     s->wall = params_get_u32(p, PARAM_FAULT_WALL) != 0u;
+    s->rf_low_max_us = params_get_u32(p, PARAM_RF_LOW_MAX_TAKEOFF_S) * 1000000u;
+    s->t_rf_not_fault_us = now_us;
     s->named_values = params_get_u32(p, PARAM_NAMED_VALUE_ENABLE) != 0u;
     s->last_now_us = now_us;
     s->t_last_map_us = now_us;
@@ -47,10 +49,36 @@ void sched_uart_rx(sched_t *s, const uint8_t *data, uint32_t len, uint32_t now_u
     mavrx_feed(&s->rx, data, len, now_us);
 }
 
-/* Rangefinder state for the height of MAP-15. */
+/* Rangefinder state for the height of MAP-15: below the minimum = at the ground, unless it lasts longer
+ * than RF_LOW_MAX_TAKEOFF_S in TAKEOFF (stuck low: a fault, MAP-15b, until the run of low readings ends or the
+ * vehicle is back in a ground phase). */
+/* REQ: MAP-15, MAP-15b, MAP-15c */
 static void fill_rf(sched_t *s, uint32_t now_us)
 {
-    s->hin.rf_valid = mavrx_rf_valid(&s->rx, now_us, &s->hin.rf_range_m);
+    s->rf_raw = mavrx_rf_state(&s->rx, now_us, &s->hin.rf_range_m);
+    uint32_t since = 0u;
+    const bool low_run = mavrx_rf_low_since(&s->rx, now_us, &since);
+    if (!low_run || phase_is_ground(s->phase.phase)) {
+        s->rf_stuck_low = false;
+    } else if (!s->rf_stuck_low && s->phase.phase == PHASE_TAKEOFF) {
+        const uint32_t from = ((int32_t)(since - s->phase.t_enter_us) > 0) ? since : s->phase.t_enter_us;
+        if ((uint32_t)(now_us - from) > s->rf_low_max_us) {
+            s->rf_stuck_low = true;
+            ev_raise(&s->ev, EV_ONE_RF_STUCK_LOW, 0u);
+        }
+    } else {
+        /* the stuck state is kept until the low run ends */
+    }
+    if (s->rf_raw != MAVRX_RF_FAULT) {
+        s->t_rf_not_fault_us = now_us;
+    }
+    if (s->rf_raw == MAVRX_RF_OK) {
+        s->hin.rf = GROUND_RF_OK;
+    } else if (s->rf_raw == MAVRX_RF_LOW && !s->rf_stuck_low) {
+        s->hin.rf = GROUND_RF_LOW;
+    } else {
+        s->hin.rf = GROUND_RF_FAULT;
+    }
 }
 
 /* REQ: MAP-14, 5.1 (capture time = mid-exposure, DEV-12 p. 6) */
@@ -192,7 +220,8 @@ static void handle_rx(sched_t *s, uint32_t now_us)
     }
 }
 
-/* Body height for the phase automaton: rangefinder only (MAP-15b); false if not valid. */
+/* Body height for the phase automaton: rangefinder, or the ground height for a below-minimum reading
+ * (MAP-15b, MAP-15c); false on a rangefinder fault. */
 static bool phase_height(sched_t *s, uint32_t now_us, float *h)
 {
     float pitch = 0.0f;
@@ -201,8 +230,8 @@ static bool phase_height(sched_t *s, uint32_t now_us, float *h)
         pitch = 0.0f;
         roll = 0.0f;
     }
-    return ground_body_height(PHASE_FLIGHT, &s->hin, &s->core.fusion.mount[TOF_SENSOR_C], pitch, roll, h) ==
-           GROUND_H_RANGEFINDER;
+    return ground_body_height(PHASE_FLIGHT, &s->hin, &s->core.fusion.mount[TOF_SENSOR_C], pitch, roll, h) !=
+           GROUND_H_NONE;
 }
 
 /* REQ: MAP-16, MAP-17 (GROUND_RECOVER reset) */
@@ -230,7 +259,7 @@ static void update_phase(sched_t *s, uint32_t now_us)
 /* Height valid for GROUND_POLICY = DROP in FLIGHT (MAP-07): rangefinder and ATTITUDE. */
 static bool drop_height_valid(const sched_t *s, uint32_t now_us)
 {
-    return s->hin.rf_valid && mavrx_att_valid(&s->rx, now_us);
+    return s->hin.rf == GROUND_RF_OK && mavrx_att_valid(&s->rx, now_us);
 }
 
 /* REQ: FLT-01 (fault classes, detection <= 300 ms) */
@@ -407,14 +436,26 @@ static void on_new_map(sched_t *s, uint32_t now_us)
     }
 }
 
-/* REQ: DIA-03 (state channels) */
+/* REQ: DIA-03, DIA-03a (state channels) */
 static void update_event_states(sched_t *s, uint32_t now_us)
 {
     sensor_health_t h[TOF_NUM_SENSORS];
     health_array(s, h);
     for (uint8_t k = 0; k < TOF_NUM_SENSORS; k++) {
-        ev_set_state(&s->ev, (ev_channel_t)(EV_CH_SENSOR_L + k), (h[k] == SENSOR_FAILED) ? 1u : 0u);
+        /* DIA-03a: "OK" only after the first accepted frame, not when a reinit attempt starts. */
+        if (h[k] == SENSOR_FAILED) {
+            s->sensor_lost[k] = true;
+            s->frames_at_lost[k] = s->core.stats[k].frames;
+        } else if (s->sensor_lost[k] && s->core.stats[k].frames != s->frames_at_lost[k]) {
+            s->sensor_lost[k] = false;
+        } else {
+            /* unchanged */
+        }
+        ev_set_state(&s->ev, (ev_channel_t)(EV_CH_SENSOR_L + k), s->sensor_lost[k] ? 1u : 0u);
     }
+    const bool on_ground = s->phase.phase == PHASE_GROUND || s->phase.phase == PHASE_ARMED_GROUND;
+    const bool rf_bad = s->rf_raw == MAVRX_RF_FAULT && (uint32_t)(now_us - s->t_rf_not_fault_us) >= SCHED_RF_GROUND_DEBOUNCE_US;
+    ev_set_state(&s->ev, EV_CH_RF_GROUND, (on_ground && rf_bad) ? 1u : 0u);
     ev_set_state(&s->ev, EV_CH_STALE, (s->have_map && (s->faults & PARAM_FAULT_BIT_MAP_STALE) != 0u) ? 1u : 0u);
     ev_set_state(&s->ev, EV_CH_MAP_LOST, ((s->faults & PARAM_FAULT_BIT_MAP_LOST) != 0u) ? 1u : 0u);
     const bool link = mavrx_hb_valid(&s->rx, now_us);

@@ -3,6 +3,19 @@
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии — [SemVer](https://semver.org/lang/ru/) (SW-10).
 Версия прошивки задаётся в `core/include/core/version.h`.
 
+## [Unreleased] — ТЗ 5.8 (решения по DEV-13, DEV-14)
+
+### Изменено
+
+- MAP-15c: отсчёт дальномера ≤ min_distance — «у земли» (высота по `TOF_HEIGHT_GROUND_M`, распознавание земли работает),
+  выше максимума / плохой сигнал / нет сообщений > 500 мс — отказ (MAP-15b); ниже минимума дольше
+  `RF_LOW_MAX_TAKEOFF_S` (новый параметр, 5 с) в TAKEOFF — MAP-15b и «TOF RF STUCK LOW». Формат слота параметров 5,
+  `docs/params.md` перегенерирован.
+- DIA-03a: «TOF RF INVALID ON GROUND» (GROUND / ARMED_GROUND, дальномер невалиден 2 с); «TOF SENSOR x OK» — только после
+  первого принятого кадра (раньше — при начале попытки переинициализации).
+- FC-04: `RC7_OPTION = 40` исключён из `params/fc_tof_v1.param` и `params/sitl_tof.param`; FC-05: высота взлёта до первого
+  участка ≥ 3 м (миссии T-26). DEV-13 и DEV-14 закрыты.
+
 ## [Unreleased] — E3 «SITL», часть 1 (остановлен по DEV-14)
 
 ### Добавлено

@@ -40,13 +40,20 @@ typedef enum {
     GROUND_H_PARAM         /* TOF_HEIGHT_GROUND_M with MOUNT_XYZ_M */
 } ground_h_src_t;
 
-/* MAP-15, MAP-15b: GROUND, ARMED_GROUND, GROUND_RECOVER - parameter; TAKEOFF, FLIGHT, LANDING,
- * PHASE_UNKNOWN - rangefinder if valid (within 500 ms), else none: classification off, every target real.
- * TOF_HEIGHT_GROUND_M is never used in the air. */
-ground_h_src_t ground_height_source(phase_t ph, bool rf_valid);
+/* MAP-15c: rangefinder state as used for the height (the scheduler turns a stuck low reading into a fault). */
+typedef enum {
+    GROUND_RF_FAULT = 0, /* above the maximum, no sample for > 500 ms, or stuck low in TAKEOFF */
+    GROUND_RF_OK,
+    GROUND_RF_LOW        /* reading at or below the minimum: at the ground */
+} ground_rf_t;
+
+/* MAP-15, MAP-15b, MAP-15c: GROUND, ARMED_GROUND, GROUND_RECOVER - parameter; TAKEOFF, FLIGHT, LANDING,
+ * PHASE_UNKNOWN - rangefinder if valid, the parameter if the reading is below the minimum (at the ground),
+ * else none: classification off, every target real. */
+ground_h_src_t ground_height_source(phase_t ph, ground_rf_t rf);
 
 typedef struct {
-    bool rf_valid;
+    ground_rf_t rf;
     float rf_range_m;   /* DISTANCE_SENSOR orientation 25 */
     geo_vec3_t rf_xyz;  /* RF_XYZ_M */
     float h_opt_ground_m; /* TOF_HEIGHT_GROUND_M */

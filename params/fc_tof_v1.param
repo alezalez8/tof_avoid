@@ -1,6 +1,7 @@
 # tof_avoid: ArduCopter parameters for the module tests on the real FC (FC-01, TZ section 8).
 # Firmware: ArduCopter V4.7.2 (tag Copter-4.7.2, commit fb773567896014da007bca58358704d4a0d8516f).
 # Board: Cube Orange+. Applied by the human only (CLAUDE.md section 7); the agent never writes FC parameters.
+# Missions: takeoff altitude before the first horizontal leg >= 3 m (FC-05, TZ 5.8).
 # Values marked * are start values tuned by the tests named in the comment. Same set as params/sitl_tof.param
 # except the SITL-only lines (SERIAL1 pose link, SITL rangefinder, logging).
 #
@@ -65,5 +66,5 @@ WP_YAW_BEHAVIOR 1
 WP_SPD 1.0
 RTL_SPEED_MS 1.0
 
-# --- avoidance switch (TZ section 8). DEV-13: in 4.7.2 option 40 switches Simple Avoidance only, not BendyRuler ---
-RC7_OPTION 40
+# --- FC-04 (TZ 5.8): no RCx_OPTION = 40 - in 4.7.2 it switches Simple Avoidance only, not BendyRuler.
+# Emergency avoidance off in flight: mode switch to Loiter or AltHold; between flights: OA_TYPE = 0. ---

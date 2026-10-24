@@ -80,7 +80,7 @@ static void on_attitude(mavrx_t *r, const mavlink_message_t *m, uint32_t now_us)
     }
 }
 
-/* REQ: MAP-15 (DISTANCE_SENSOR orientation 25 only) */
+/* REQ: MAP-15 (DISTANCE_SENSOR orientation 25 only), MAP-15c (below minimum vs fault) */
 static void on_distance_sensor(mavrx_t *r, const mavlink_message_t *m, uint32_t now_us)
 {
     mavlink_distance_sensor_t d;
@@ -90,13 +90,24 @@ static void on_distance_sensor(mavrx_t *r, const mavlink_message_t *m, uint32_t 
     }
     r->rf_seen = true;
     r->t_rf_us = now_us;
-    /* signal_quality 1 = invalid signal (0 = unknown). */
-    r->rf_in_range = d.current_distance >= d.min_distance && d.current_distance <= d.max_distance &&
-                     d.max_distance > 0u && d.signal_quality != 1u;
+    /* signal_quality 1 = invalid signal (0 = unknown): a fault like a reading above the maximum. */
+    const bool usable = d.max_distance > 0u && d.signal_quality != 1u;
+    const bool low = usable && d.current_distance <= d.min_distance;
+    r->rf_in_range = usable && !low && d.current_distance <= d.max_distance;
     if (r->rf_in_range) {
         r->rf_valid_seen = true;
         r->t_rf_valid_us = now_us;
         r->rf_range_m = (float)d.current_distance / 100.0f;
+    }
+    if (low) {
+        if (!r->rf_low_run) {
+            r->rf_low_run = true;
+            r->t_rf_low_since_us = now_us;
+        }
+        r->rf_low_seen = true;
+        r->t_rf_low_us = now_us;
+    } else {
+        r->rf_low_run = false;
     }
 }
 
@@ -267,10 +278,28 @@ bool mavrx_att_at(const mavrx_t *r, uint32_t t_us, uint32_t now_us, float *pitch
 /* REQ: MAP-15, MAP-15b (no valid DISTANCE_SENSOR for > 500 ms: height invalid) */
 bool mavrx_rf_valid(const mavrx_t *r, uint32_t now_us, float *range_m)
 {
-    if (!r->rf_valid_seen || age_us(now_us, r->t_rf_valid_us) > MAVRX_RF_TIMEOUT_US) {
+    return mavrx_rf_state(r, now_us, range_m) == MAVRX_RF_OK;
+}
+
+/* REQ: MAP-15b, MAP-15c */
+mavrx_rf_state_t mavrx_rf_state(const mavrx_t *r, uint32_t now_us, float *range_m)
+{
+    const bool ok = r->rf_valid_seen && age_us(now_us, r->t_rf_valid_us) <= MAVRX_RF_TIMEOUT_US;
+    const bool low = r->rf_low_seen && age_us(now_us, r->t_rf_low_us) <= MAVRX_RF_TIMEOUT_US;
+    if (ok && (!low || tdiff(r->t_rf_valid_us, r->t_rf_low_us) > 0)) {
+        *range_m = r->rf_range_m;
+        return MAVRX_RF_OK;
+    }
+    return low ? MAVRX_RF_LOW : MAVRX_RF_FAULT;
+}
+
+/* REQ: MAP-15c (RF_LOW_MAX_TAKEOFF_S) */
+bool mavrx_rf_low_since(const mavrx_t *r, uint32_t now_us, uint32_t *since_us)
+{
+    if (!r->rf_low_run || age_us(now_us, r->t_rf_low_us) > MAVRX_RF_TIMEOUT_US) {
         return false;
     }
-    *range_m = r->rf_range_m;
+    *since_us = r->t_rf_low_since_us;
     return true;
 }
 

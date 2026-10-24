@@ -479,7 +479,16 @@ void test_SNS12a_MAP10a_new_parameters(void)
     TEST_ASSERT_EQUAL_UINT32(0u, params_get_u32(&g_p, PARAM_AMBIENT_DEGRADED));
     TEST_ASSERT_EQUAL_INT((int)PARAM_ORIENT_CONFIRMED, (int)params_find("ORIENT_CONFIRMED"));
     TEST_ASSERT_EQUAL_INT((int)PARAM_AMBIENT_DEGRADED, (int)params_find("AMBIENT_DEGRADED"));
-    TEST_ASSERT_EQUAL_UINT32(4u, PARAMS_FORMAT_VERSION);
+    TEST_ASSERT_EQUAL_UINT32(5u, PARAMS_FORMAT_VERSION);
+}
+
+/* MAP-15c: RF_LOW_MAX_TAKEOFF_S = 5 s, 1...60. */
+void test_MAP15c_rf_low_max_takeoff_parameter(void)
+{
+    TEST_ASSERT_EQUAL_UINT32(5u, params_get_u32(&g_p, PARAM_RF_LOW_MAX_TAKEOFF_S));
+    TEST_ASSERT_EQUAL_INT(PARAMS_ERR_RANGE, params_set_u32(&g_p, PARAM_RF_LOW_MAX_TAKEOFF_S, 0u));
+    TEST_ASSERT_EQUAL_INT(PARAMS_OK, params_set_u32(&g_p, PARAM_RF_LOW_MAX_TAKEOFF_S, 60u));
+    TEST_ASSERT_EQUAL_INT((int)PARAM_RF_LOW_MAX_TAKEOFF_S, (int)params_find("RF_LOW_MAX_TAKEOFF_S"));
 }
 
 int main(void)
@@ -514,5 +523,6 @@ int main(void)
     RUN_TEST(test_SW07_save_after_boot_read_error_beats_existing_slot);
     RUN_TEST(test_MAP07a_drop_rejected_without_build_flag);
     RUN_TEST(test_SNS12a_MAP10a_new_parameters);
+    RUN_TEST(test_MAP15c_rf_low_max_takeoff_parameter);
     return UNITY_END();
 }

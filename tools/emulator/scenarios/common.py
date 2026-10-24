@@ -166,7 +166,7 @@ def flight_start_mission(st, items, alt):
     """Upload a mission, arm in GUIDED, switch to AUTO with throttle up; returns the AUTO start time."""
     g = st.gcs
     g.upload_mission(items)
-    g.rc_override(c3=1500, c7=2000)
+    g.rc_override(c3=1500)
     g.set_mode("GUIDED")
     g.arm()
     g.set_mode("AUTO")

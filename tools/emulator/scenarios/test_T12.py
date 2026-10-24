@@ -169,7 +169,7 @@ def test_T12_a_default():
         check_fc_view(res, "ground", g, t0, med, 300)
 
         res.step("Взлёт в GUIDED на 3 м, висение 10 с")
-        g.rc_override(c3=1500, c7=2000)
+        g.rc_override(c3=1500)
         g.set_mode("GUIDED")
         g.arm()
         g.takeoff(3.0)
@@ -217,7 +217,7 @@ def test_T12_b_clear_measured():
         res.step("CLEAR_MEASURED: AMBIENT_CLEAR_MAX = 1000; взлёт в GUIDED на 3 м")
         st.start()
         g = st.gcs
-        g.rc_override(c3=1500, c7=2000)
+        g.rc_override(c3=1500)
         g.set_mode("GUIDED")
         g.arm()
         g.takeoff(3.0)

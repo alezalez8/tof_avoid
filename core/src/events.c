@@ -4,8 +4,8 @@
 
 #include "core/version.h"
 
-/* Message ids for the per-type rate limit: channel * 4 + state, then 32 + one-shot. */
-#define EV_ID_ONESHOT_BASE 32u
+/* Message ids for the per-type rate limit: channel * 4 + state, then 40 + one-shot. */
+#define EV_ID_ONESHOT_BASE 40u
 #define EV_ID_COUNT EV_MSG_IDS
 
 /* REQ: DIA-04, DIA-05 */
@@ -108,7 +108,7 @@ static void sb_int(sb_t *b, int32_t v)
 
 static const char k_sensor_name[3][2] = {"L", "C", "R"};
 
-/* REQ: DIA-03 (texts and severities) */
+/* REQ: DIA-03, DIA-03a (texts and severities) */
 static uint8_t channel_text(const ev_t *e, uint8_t ch, uint8_t st, sb_t *b)
 {
     switch (ch) {
@@ -141,8 +141,11 @@ static uint8_t channel_text(const ev_t *e, uint8_t ch, uint8_t st, sb_t *b)
     case EV_CH_FC_LINK:
         sb_str(b, "TOF FC LINK LOST");
         return EV_SEV_WARNING;
-    default: /* EV_CH_PHASE */
+    case EV_CH_PHASE:
         sb_str(b, "TOF PHASE UNKNOWN");
+        return EV_SEV_WARNING;
+    default: /* EV_CH_RF_GROUND, DIA-03a */
+        sb_str(b, "TOF RF INVALID ON GROUND");
         return EV_SEV_WARNING;
     }
 }
@@ -169,6 +172,9 @@ static uint8_t oneshot_text(const ev_t *e, uint8_t k, sb_t *b)
     case EV_ONE_ORIENT:
         sb_str(b, "TOF ORIENT NOT CONFIRMED");
         return EV_SEV_WARNING;
+    case EV_ONE_RF_STUCK_LOW:
+        sb_str(b, "TOF RF STUCK LOW");
+        return EV_SEV_WARNING;
     default: /* EV_ONE_READY */
         sb_str(b, "TOF READY ");
         sb_str(b, tof_version_string());
@@ -181,7 +187,8 @@ static uint8_t oneshot_text(const ev_t *e, uint8_t k, sb_t *b)
 /* Channels whose return to 0 is not reported. */
 static bool silent_clear(uint8_t ch)
 {
-    return ch == EV_CH_STALE || ch == EV_CH_MAP_LOST || ch == EV_CH_FC_LINK || ch == EV_CH_PHASE;
+    return ch == EV_CH_STALE || ch == EV_CH_MAP_LOST || ch == EV_CH_FC_LINK || ch == EV_CH_PHASE ||
+           ch == EV_CH_RF_GROUND;
 }
 
 static bool type_allowed(const ev_t *e, uint8_t id, uint32_t now_us)
@@ -237,8 +244,10 @@ bool ev_next_statustext(ev_t *e, uint32_t now_us, uint8_t *severity, char text[E
     }
     if (best_id >= EV_ID_ONESHOT_BASE) {
         e->pending[best_id - EV_ID_ONESHOT_BASE] = false;
-    } else {
+    } else if (best_id / 4u < (unsigned)EV_CH_COUNT) {
         e->rep[best_id / 4u] = (uint8_t)(best_id % 4u);
+    } else {
+        /* channel ids end before EV_ID_ONESHOT_BASE */
     }
     e->sent_any[best_id] = true;
     e->t_sent[best_id] = now_us;

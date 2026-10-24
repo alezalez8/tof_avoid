@@ -39,7 +39,7 @@ def run_cycle(res, st, mission, timeout=240.0):
     res.step("Миссия: " + ", ".join("%s(%.0f,%.0f,%.1f)" % ({22: "TAKEOFF", 16: "WP", 21: "LAND", 115: "YAW"}[c], n, e, a)
                                      for c, n, e, a, _ in mission))
     g.upload_mission(mission)
-    g.rc_override(c3=1500, c7=2000)
+    g.rc_override(c3=1500)
     g.set_mode("GUIDED")
     time.sleep(2)  # GROUND before arming
     g.arm()
